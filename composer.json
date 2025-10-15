@@ -19,8 +19,24 @@
   },
   "authors": [
     {
-      "name": "viky_muhammad_alif-20250804023!",
+      "name": "Viky Muhammad Alif 20250804023",
       "email": "vikymuhammadalif@student.esaunggul.ac.id"
+    },
+    {
+      "name": "Satrio Adhiyatama Erlangga - 20250804021",
+      "email": "sadhiyatama@student.esaunggul.ac.id"
+    },
+    {
+      "name": "Yurike Prastisia Hutami - 20250804019",
+      "email": "yurike93@student.esaunggul.ac.id"
+    },
+    {
+      "name": "Fakhri Akbar - 20250804030",
+      "email": "fakhriakbr7@student.esaunggul.ac.id"
+    },
+    {
+      "name": "Julio Arky Aquino Reyaan - 20250804021",
+      "email": "julioreyaan@student.esaunggul.ac.id"
     }
   ],
   "require": {
