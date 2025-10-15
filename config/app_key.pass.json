@@ -1,0 +1,6 @@
+{
+    "alg": "pbkdf2-sha256",
+    "salt": "oWAth9vV6SB7wxCkZvlc_w",
+    "iter": 210000,
+    "auth": "S6CGzO6mwIsczKFE_qGX3VcGXadsXW0_q-YGM54H6U0"
+}

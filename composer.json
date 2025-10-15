@@ -1,0 +1,32 @@
+{
+  "name": "kelompok1/cryptography",
+  "version": "1.0.0",
+  "description": "Tugas Cryptography Dengan Menggunakan PHP dan AES-256-CBC + HMAC-SHA256  — Encrypt-then-MAC",
+  "keywords": [
+    "cryptography",
+    "php",
+    "aes-256-cbc",
+    "hmac-sha256",
+    "encrypt-then-mac",
+    "workerman",
+    "kelompok1"
+  ],
+  "type": "project",
+  "autoload": {
+    "psr-4": {
+      "Kelompok1\\CryptoGraphy\\": "kelompok1/"
+    }
+  },
+  "authors": [
+    {
+      "name": "viky_muhammad_alif-20250804023!",
+      "email": "vikymuhammadalif@student.esaunggul.ac.id"
+    }
+  ],
+  "require": {
+    "php": ">=8.3",
+    "workerman/workerman": "^5.1",
+    "laravel/prompts": "^0.3.7",
+    "laravel/pint": "^1.25"
+  }
+}
