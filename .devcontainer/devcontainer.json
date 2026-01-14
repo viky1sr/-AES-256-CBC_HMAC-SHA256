@@ -1,12 +1,16 @@
 {
-  "name": "php84-codespace",
-  "image": "php:8.4-cli",
+  "name": "php83-fast",
+  "image": "mcr.microsoft.com/devcontainers/php:1-8.3",
+  "features": {
+    "ghcr.io/devcontainers/features/composer:1": {}
+  },
   "forwardPorts": [8000],
   "portsAttributes": {
     "8000": {
-      "label": "PHP 8.4 Server",
+      "label": "PHP Server",
       "onAutoForward": "openPreview"
     }
   },
-  "postStartCommand": "php -S 0.0.0.0:8000"
+  "postCreateCommand": "composer install --no-interaction --prefer-dist",
+  "postStartCommand": "php -S 0.0.0.0:8000 -t ."
 }
