@@ -1,14 +1,13 @@
 {
-  "name": "php83-superfast",
-  "image": "mcr.microsoft.com/devcontainers/php:1-8.3",
-  "features": {
-    "ghcr.io/devcontainers/features/composer:1": {}
-  },
+  "name": "php83-fast-composer-manual",
+  "image": "php:8.3-cli",
   "forwardPorts": [8000],
   "portsAttributes": {
     "8000": {
       "label": "PHP Server",
       "onAutoForward": "openPreview"
     }
-  }
+  },
+  "postCreateCommand": "apt-get update && apt-get install -y git unzip curl && curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer && composer install --no-interaction --prefer-dist",
+  "postStartCommand": "php -S 0.0.0.0:8000 -t ."
 }
