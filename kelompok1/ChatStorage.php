@@ -4,31 +4,28 @@ namespace Kelompok1\CryptoGraphy;
 
 use Kelompok1\CryptoGraphy\Domain\ChatMessage;
 use Kelompok1\CryptoGraphy\Serialization\JsonSerializer;
+use Kelompok1\CryptoGraphy\Services\FileSecureStorage;
 
 final class ChatStorage
 {
-    private string $filePath;
+    private string $dataDir;
+    private FileSecureStorage $secureStorage;
     private JsonSerializer $serializer;
 
-    public function __construct(string $filePath = null)
+    public function __construct(string $dataDir = null)
     {
         $config = @include __DIR__ . '/../config/app.php';
-        $defaultPath = __DIR__ . '/../data/chats.json';
+        $defaultDataDir = __DIR__ . '/../data';
+        
         if (is_array($config) && isset($config['data_dir'])) {
-            $defaultPath = $config['data_dir'] . '/chats.json';
+            $defaultDataDir = $config['data_dir'];
         }
 
-        $this->filePath = $filePath ?? $defaultPath;
+        $this->dataDir = $dataDir ?? $defaultDataDir;
         $this->serializer = new JsonSerializer();
         
-        $dir = dirname($this->filePath);
-        if (!is_dir($dir)) {
-            @mkdir($dir, 0777, true);
-        }
-
-        if (!file_exists($this->filePath)) {
-            @file_put_contents($this->filePath, json_encode([]));
-        }
+        // Unified Secure Storage for Chats
+        $this->secureStorage = new FileSecureStorage($this->dataDir . '/chats', 'chats_index.json');
     }
 
     /**
@@ -36,23 +33,26 @@ final class ChatStorage
      */
     public function getAllTokens(): array
     {
-        if (!file_exists($this->filePath) || !is_readable($this->filePath)) {
-            return [];
-        }
-        $content = @file_get_contents($this->filePath);
-        if (!$content) return [];
+        $tokens = [];
+        $ids = $this->secureStorage->getAllIds();
         
-        try {
-            return $this->serializer->deserialize($content);
-        } catch (\Exception $e) {
-            return [];
+        foreach ($ids as $id) {
+            $token = $this->secureStorage->load($id);
+            if ($token) {
+                $tokens[] = $token;
+            }
         }
+        
+        return $tokens;
     }
 
-    public function saveToken(string $token): void
+    public function loadTokenById(string $id): ?string
     {
-        $tokens = $this->getAllTokens();
-        $tokens[] = $token;
-        file_put_contents($this->filePath, $this->serializer->serialize($tokens));
+        return $this->secureStorage->load($id);
+    }
+
+    public function saveToken(string $token): string
+    {
+        return $this->secureStorage->save($token);
     }
 }

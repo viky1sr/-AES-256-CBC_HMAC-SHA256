@@ -14,12 +14,35 @@ final class RegisterPage
     <meta charset="UTF-8">
     <title>$title - Kelompok 1</title>
     <style>
-        body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; background: #f0f2f5; }
-        .card { background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 400px; }
-        input { width: 100%; padding: 0.5rem; margin: 0.5rem 0; box-sizing: border-box; }
-        button { width: 100%; padding: 0.5rem; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background: #f0f2f5; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        .card { background: white; padding: 2.5rem; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.1); width: 100%; max-width: 900px; min-height: 600px; display: flex; flex-direction: column; position: relative; }
+        h2 { color: #1c1e21; margin-top: 0; }
+        input { width: 100%; padding: 0.75rem; margin: 0.5rem 0; box-sizing: border-box; border: 1px solid #ddd; border-radius: 6px; font-size: 1rem; }
+        button { width: 100%; padding: 0.75rem; background: #007bff; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 1rem; font-weight: 600; transition: background 0.2s; }
         button:hover { background: #0056b3; }
-        .links { margin-top: 1rem; text-align: center; font-size: 0.9rem; }
+        .links { margin-top: 1.5rem; text-align: center; font-size: 0.95rem; }
+        .links a { color: #007bff; text-decoration: none; }
+        
+        #chat-container { display: flex; gap: 20px; flex: 1; min-height: 400px; }
+        #chat-main { flex: 3; display: flex; flex-direction: column; }
+        #chat-box { border: 1px solid #e4e6eb; padding: 15px; flex: 1; overflow-y: auto; margin-bottom: 15px; background: #f9f9f9; border-radius: 8px; font-size: 1.05rem; }
+        #chat-form { display: flex; gap: 10px; }
+        #chat-input { flex: 1; margin: 0; }
+        #chat-password { width: 200px; margin: 0; }
+        #chat-btn { width: auto; white-space: nowrap; }
+        
+        #sidebar { flex: 1; border-left: 1px solid #e4e6eb; padding-left: 15px; }
+        #user-list ul { list-style: none; padding: 0; }
+        #user-list li { padding: 8px 0; border-bottom: 1px solid #eee; display: flex; align-items: center; gap: 8px; }
+
+        /* Modal Styles */
+        .modal { display: none; position: fixed; z-index: 10000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); align-items: center; justify-content: center; backdrop-filter: blur(4px); }
+        .modal-content { background: white; padding: 25px; border-radius: 12px; width: 90%; max-width: 400px; box-shadow: 0 20px 50px rgba(0,0,0,0.5); position: relative; z-index: 10001; }
+        .modal-header { margin-bottom: 15px; font-weight: bold; font-size: 1.2rem; color: #1c1e21; }
+
+        .encrypted-msg { color: #555; font-family: 'Courier New', Courier, monospace; font-weight: bold; cursor: pointer; padding: 6px 10px; border-radius: 6px; transition: all 0.2s; display: inline-block; position: relative; z-index: 1; background: #eee; border: 1px solid #ccc; font-size: 0.9rem; }
+        .encrypted-msg:hover { background: #e0e0e0; border-color: #007bff; color: #007bff; }
+        .msg-entry { margin-bottom: 10px; line-height: 1.4; padding: 4px; border-radius: 4px; }
     </style>
 </head>
 <body>
@@ -27,6 +50,19 @@ final class RegisterPage
         <h2>$title</h2>
         $msgHtml
         $content
+    </div>
+
+    <!-- Password Modal -->
+    <div id="passwordModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">Buka Pesan Terenkripsi</div>
+            <p style="font-size: 0.9rem; color: #666;">Masukkan password yang digunakan saat mengenkripsi pesan ini.</p>
+            <input type="password" id="modal-password" placeholder="Password dekripsi...">
+            <div style="display: flex; gap: 10px; margin-top: 10px;">
+                <button id="modal-submit-btn" style="flex: 1;">Buka</button>
+                <button id="modal-cancel-btn" style="flex: 1; background: #6c757d;">Batal</button>
+            </div>
+        </div>
     </div>
 </body>
 </html>
@@ -67,85 +103,217 @@ HTML;
     {
         $msgHtml = $message ? "<div style='color: red; margin-bottom: 10px;'>$message</div>" : "";
         $content = <<<HTML
-        <p>Selamat datang, <strong>$username</strong>!</p>
+        <p style="margin-bottom: 20px;">Halo, <strong>$username</strong>! Selamat datang di forum Kelompok 1.</p>
         
         $msgHtml
 
-        <div id="chat-box" style="border: 1px solid #ccc; padding: 10px; height: 300px; overflow-y: scroll; margin-bottom: 10px; background: #fff; text-align: left;">
-            $chatHtml
-        </div>
+        <div id="chat-container">
+            <div id="chat-main">
+                <div id="chat-box">
+                    $chatHtml
+                </div>
 
-        <form id="chat-form" method="POST" action="/chat">
-            <input type="text" name="message" id="chat-input" placeholder="Tulis pesan..." required>
-            <input type="password" name="chat_password" id="chat-password" placeholder="Password untuk enkripsi chat" required>
-            <button type="submit">Kirim (Enkripsi)</button>
-        </form>
-
-        <hr>
-        <form id="view-form" method="GET" action="/dashboard">
-            <input type="password" name="view_password" id="view-password" placeholder="Password untuk dekripsi chat">
-            <button type="submit" style="background: #28a745;">Lihat/Refresh Chat (Dekripsi)</button>
-        </form>
-
-        <div class="links">
-            <a href="/logout">Logout</a>
+                <form id="chat-form" method="POST" action="/chat">
+                    <div style="display: flex; flex-direction: column; gap: 8px; width: 100%;">
+                        <div style="display: flex; gap: 10px;">
+                            <select name="target_uuid" id="target-user" style="padding: 0.75rem; border-radius: 6px; border: 1px solid #ddd;">
+                                <option value="all">Kirim ke: Semua Orang</option>
+                            </select>
+                            <input type="text" name="message" id="chat-input" placeholder="Tulis pesan rahasia..." required style="flex: 1; margin: 0;">
+                        </div>
+                        <div style="display: flex; gap: 10px;">
+                            <input type="password" name="chat_password" id="chat-password" placeholder="Password Enkripsi" required style="flex: 1; margin: 0;">
+                            <button type="submit" id="chat-btn" style="width: auto;">Kirim Terenkripsi</button>
+                        </div>
+                    </div>
+                </form>
+                
+                <p style="font-size: 0.85rem; color: #666; margin-top: 10px;">
+                    💡 Tips: Klik pesan bertanda <i>[Terenkripsi]</i> untuk membukanya dengan password.
+                </p>
+            </div>
+            
+            <div id="sidebar">
+                <h4 style="margin-top: 0;">Online</h4>
+                <div id="user-list">
+                    <i>Memuat...</i>
+                </div>
+                <div class="links" style="text-align: left; margin-top: 40px;">
+                    <a href="/logout" style="color: #dc3545; font-weight: bold;">🚪 Logout</a>
+                </div>
+            </div>
         </div>
 
         <script>
-            const chatBox = document.getElementById('chat-box');
-            const chatForm = document.getElementById('chat-form');
-            const viewForm = document.getElementById('view-form');
-            const viewPasswordInput = document.getElementById('view-password');
+            // Pastikan fungsi tersedia secara global SEGERA sebelum DOM dimuat lengkap jika perlu
+            window.openDecryptModal = function(token) {
+                const modal = document.getElementById('passwordModal');
+                const modalInput = document.getElementById('modal-password');
+                if (modal && modalInput) {
+                    window.currentTokenToDecrypt = token;
+                    modalInput.value = '';
+                    modal.style.display = 'flex';
+                    modalInput.focus();
+                }
+            };
 
-            // Simpan password dekripsi di session storage agar tetap ada saat polling
-            if (new URLSearchParams(window.location.search).has('view_password')) {
-                sessionStorage.setItem('view_password', viewPasswordInput.value);
-            } else if (sessionStorage.getItem('view_password')) {
-                viewPasswordInput.value = sessionStorage.getItem('view_password');
-            }
+            document.addEventListener('DOMContentLoaded', () => {
+                const chatBox = document.getElementById('chat-box');
+                const userList = document.getElementById('user-list');
+                const chatForm = document.getElementById('chat-form');
+                const modal = document.getElementById('passwordModal');
+                const modalInput = document.getElementById('modal-password');
+                const modalSubmit = document.getElementById('modal-submit-btn');
+                const modalCancel = document.getElementById('modal-cancel-btn');
 
-            async function fetchChat() {
-                const viewPassword = viewPasswordInput.value;
-                try {
-                    const response = await fetch('/api/chat?view_password=' + encodeURIComponent(viewPassword));
-                    if (response.ok) {
-                        const html = await response.text();
-                        if (html.trim() !== "") {
-                            chatBox.innerHTML = html;
+                if (chatBox && chatForm && modal && modalSubmit && modalCancel) {
+                    // Polling State
+                    let globalViewPassword = '';
+                    let globalViewToken = '';
+                    let lastChatHtml = '';
+
+                    async function fetchChat() {
+                        try {
+                            const url = '/api/chat?view_password=' + encodeURIComponent(globalViewPassword) + 
+                                        '&view_token=' + encodeURIComponent(globalViewToken);
+                            const response = await fetch(url);
+                            if (response.ok) {
+                                const html = await response.text();
+                                const trimmedHtml = html.trim();
+                                if (trimmedHtml !== "" && lastChatHtml !== trimmedHtml) {
+                                    const shouldScroll = chatBox.scrollTop + chatBox.clientHeight >= chatBox.scrollHeight - 50;
+                                    chatBox.innerHTML = html;
+                                    lastChatHtml = trimmedHtml;
+                                    if (shouldScroll) {
+                                        chatBox.scrollTop = chatBox.scrollHeight;
+                                    }
+                                }
+                            }
+                        } catch (e) {
+                            console.error("Gagal mengambil chat:", e);
                         }
                     }
-                } catch (e) {
-                    console.error("Gagal mengambil chat:", e);
-                }
-            }
 
-            // Polling setiap 3 detik
-            setInterval(fetchChat, 3000);
+                    async function fetchUsers() {
+                        try {
+                            const response = await fetch('/api/users?format=json');
+                            if (response.ok) {
+                                const onlineUsers = await response.json();
+                                const targetSelect = document.getElementById('target-user');
+                                const currentTarget = targetSelect.value;
+                                
+                                // Update Select Dropdown
+                                targetSelect.innerHTML = '<option value="all">Kirim ke: Semua Orang</option>';
+                                for (const [uuid, name] of Object.entries(onlineUsers)) {
+                                    const option = document.createElement('option');
+                                    option.value = uuid;
+                                    option.textContent = 'Kirim ke: ' + name;
+                                    if (uuid === currentTarget) option.selected = true;
+                                    targetSelect.appendChild(option);
+                                }
 
-            // Scroll ke bawah saat pertama kali
-            chatBox.scrollTop = chatBox.scrollHeight;
-
-            chatForm.onsubmit = async (e) => {
-                e.preventDefault();
-                const formData = new FormData(chatForm);
-                try {
-                    const response = await fetch('/chat', {
-                        method: 'POST',
-                        body: formData
-                    });
-                    if (response.ok) {
-                        document.getElementById('chat-input').value = '';
-                        fetchChat();
-                        setTimeout(() => chatBox.scrollTop = chatBox.scrollHeight, 100);
+                                // Update Visual List Sidebar
+                                if (userList) {
+                                    let listHtml = "<ul>";
+                                    const entries = Object.entries(onlineUsers);
+                                    if (entries.length === 0) {
+                                        listHtml = "<i>Tidak ada user online</i>";
+                                    } else {
+                                        for (const [uuid, name] of entries) {
+                                            listHtml += "<li><span style='color: green;'>●</span> " + name + "</li>";
+                                        }
+                                        listHtml += "</ul>";
+                                    }
+                                    userList.innerHTML = listHtml;
+                                }
+                            }
+                        } catch (e) {
+                            console.error("Gagal mengambil user list:", e);
+                        }
                     }
-                } catch (e) {
-                    alert("Gagal mengirim pesan");
+
+                    modalCancel.onclick = () => {
+                        modal.style.display = 'none';
+                        window.currentTokenToDecrypt = null;
+                    };
+
+                    modalSubmit.onclick = async () => {
+                        const pass = modalInput.value;
+                        if (!pass) return;
+
+                        const token = window.currentTokenToDecrypt;
+                        globalViewPassword = pass;
+                        globalViewToken = token || '';
+                        
+                        modal.style.display = 'none';
+                        lastChatHtml = '';
+                        await fetchChat();
+                    };
+
+                    modalInput.onkeypress = (e) => {
+                        if (e.key === 'Enter') modalSubmit.click();
+                    };
+
+                    window.onclick = (event) => {
+                        if (event.target == modal) modalCancel.onclick();
+                    };
+
+                    // Delegate click for encrypted messages
+                    document.addEventListener('click', (e) => {
+                        const target = e.target.closest('.encrypted-msg');
+                        if (target) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            window.openDecryptModal(target.dataset.token);
+                        }
+                    }, true);
+
+                    // Polling
+                    setInterval(fetchChat, 3000);
+                    setInterval(fetchUsers, 4000);
+                    
+                    fetchUsers();
+                    fetchChat();
+
+                    setTimeout(() => { chatBox.scrollTop = chatBox.scrollHeight; }, 500);
+
+                    chatForm.onsubmit = async (e) => {
+                        e.preventDefault();
+                        const formData = new FormData(chatForm);
+                        formData.append('_ajax', '1');
+                        const btn = document.getElementById('chat-btn');
+                        btn.disabled = true;
+                        btn.innerText = 'Mengirim...';
+
+                        try {
+                            const response = await fetch('/chat', {
+                                method: 'POST',
+                                body: formData
+                            });
+                            if (response.ok) {
+                                document.getElementById('chat-input').value = '';
+                                document.getElementById('chat-password').value = ''; // Clear password field after send
+                                const chatPass = formData.get('chat_password');
+                                if (chatPass) {
+                                    // Cari token terbaru yang baru saja dikirim (ini agak tricky di polling, 
+                                    // tapi kita bisa clear view_token agar polling mengambil data terbaru secara normal
+                                    // atau biarkan saja jika user ingin fokus ke pesan tertentu)
+                                    globalViewPassword = chatPass;
+                                    globalViewToken = ''; // Reset token filter agar pesan baru bisa tampil
+                                    lastChatHtml = '';
+                                }
+                                await fetchChat();
+                                chatBox.scrollTop = chatBox.scrollHeight;
+                            }
+                        } catch (e) {
+                            alert("Gagal mengirim pesan");
+                        } finally {
+                            btn.disabled = false;
+                            btn.innerText = 'Kirim Terenkripsi';
+                        }
+                    };
                 }
-            };
-            
-            viewForm.onsubmit = (e) => {
-                sessionStorage.setItem('view_password', viewPasswordInput.value);
-            };
+            });
         </script>
 HTML;
         return self::render('Dashboard & Chat', $content);

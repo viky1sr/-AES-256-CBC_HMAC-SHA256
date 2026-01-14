@@ -20,20 +20,20 @@ use Kelompok1\CryptoGraphy\Support\Base64Url;
  */
 final class CryptoPassService
 {
-    public static function encryptWithPassphrase(string $plaintext, string $passphrase, int $iterations = 210_000): string
+    public static function encryptWithPassphrase(string $plaintext, string $passphrase, int $iterations = 210_000, array $meta = []): string
     {
         $salt = PassphraseKDF::randomSalt(16);
         $masterKey = PassphraseKDF::derivePBKDF2($passphrase, $salt, $iterations, 32);
 
-        $meta = [
+        $mergedMeta = array_merge($meta, [
             'kdf' => [
                 'alg' => 'pbkdf2-sha256',
                 'salt' => Base64Url::encode($salt),
                 'iter' => $iterations,
             ],
-        ];
+        ]);
 
-        return CryptoService::encrypt($plaintext, $masterKey, $meta);
+        return CryptoService::encrypt($plaintext, $masterKey, $mergedMeta);
     }
 
     public static function decryptWithPassphrase(string $token, string $passphrase): string

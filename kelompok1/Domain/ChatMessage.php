@@ -21,15 +21,17 @@ final class ChatMessage implements ArrayEntity, CryptoAutoMap
     public function __construct(
         public string $userUuid,
         public string $message,
-        public string $timestamp
+        public string $timestamp,
+        public ?string $targetUuid = null
     ) {}
 
     public function toArray(): array
     {
         return [
-            'userUuid'  => $this->userUuid,
-            'message'   => $this->message,
-            'timestamp' => $this->timestamp,
+            'userUuid'   => $this->userUuid,
+            'message'    => $this->message,
+            'timestamp'  => $this->timestamp,
+            'targetUuid' => $this->targetUuid,
         ];
     }
 
@@ -40,7 +42,8 @@ final class ChatMessage implements ArrayEntity, CryptoAutoMap
                 throw new \RuntimeException("ChatMessage.fromArray: field '$k' tidak valid");
             }
         }
-        return new self($a['userUuid'], $a['message'], $a['timestamp']);
+        $targetUuid = isset($a['targetUuid']) && is_string($a['targetUuid']) ? $a['targetUuid'] : null;
+        return new self($a['userUuid'], $a['message'], $a['timestamp'], $targetUuid);
     }
 
     public static function cryptoPurpose(): string { return 'chat'; }

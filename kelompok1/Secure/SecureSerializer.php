@@ -41,13 +41,15 @@ final class SecureSerializer
      * @param string      $masterKey   Master key biner (≥ 32B). Jika dari passphrase: hash('sha256', pass, true).
      * @param string|null $purpose     Binding logis opsional (mis. "session", "reset-password").
      * @param int|null    $ttlSec      Time-to-live (detik). Jika null → tidak kadaluarsa otomatis.
+     * @param array       $meta        Informasi tambahan yang akan dimasukkan ke token (tidak terenkripsi).
      * @return string     base64(JSON {iv,value,mac})
      */
     public function encryptPayload(
         array $payload,
         string $masterKey,
         ?string $purpose = null,
-        ?int $ttlSec = null
+        ?int $ttlSec = null,
+        array $meta = []
     ): string {
         $now = time();
 
@@ -60,7 +62,7 @@ final class SecureSerializer
         ];
 
         $binary = $this->serializer->serialize($envelope);
-        return CryptoService::encrypt($binary, $masterKey);
+        return CryptoService::encrypt($binary, $masterKey, $meta);
     }
 
     /**

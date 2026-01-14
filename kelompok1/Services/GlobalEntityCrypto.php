@@ -37,7 +37,7 @@ final readonly class GlobalEntityCrypto
     ) {}
 
     /** ENCRYPT entity → token base64(JSON {iv,value,mac}) */
-    public function encrypt(object $entity, ?int $ttlSec = null): string
+    public function encrypt(object $entity, ?int $ttlSec = null, array $meta = []): string
     {
         if (!$entity instanceof ArrayEntity || !$entity instanceof CryptoAutoMap) {
             $cn = $entity::class;
@@ -56,7 +56,8 @@ final readonly class GlobalEntityCrypto
             payload:   $payload,
             masterKey: $masterKey,
             purpose:   $purpose,
-            ttlSec:    $ttlSec
+            ttlSec:    $ttlSec,
+            meta:      $meta
         );
     }
 

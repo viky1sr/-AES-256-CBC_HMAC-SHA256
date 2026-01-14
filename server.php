@@ -42,7 +42,21 @@ $worker->onMessage = function (TcpConnection $connection, Request $request) use 
     $path = $request->path();
     $method = $request->method();
     $sid = $request->cookie('sid');
-    $currentUser = $sid ? ($sessions[$sid] ?? null) : null;
+    $currentSession = $sid ? ($sessions[$sid] ?? null) : null;
+    $currentUser = $currentSession['user'] ?? null;
+
+    // Bersihkan sesi yang sudah mati (opsional tapi baik untuk memori)
+    // if (rand(1, 100) === 1) { // 1% chance
+    //     $now = time();
+    //     foreach ($sessions as $key => $s) {
+    //         if ($now - ($s['last_seen'] ?? 0) > 3600) unset($sessions[$key]);
+    //     }
+    // }
+
+    // Tambahkan timestamp aktivitas untuk cek online
+    if ($sid && isset($sessions[$sid])) {
+        $sessions[$sid]['last_seen'] = time();
+    }
 
     if ($path === '/' || $path === '/login') {
         if ($method === 'GET') {
@@ -62,7 +76,10 @@ $worker->onMessage = function (TcpConnection $connection, Request $request) use 
             $user = $storage->findByUsername($username);
             if ($user && password_verify($password, $user->password)) {
                 $sid = bin2hex(random_bytes(16));
-                $sessions[$sid] = $user;
+                $sessions[$sid] = [
+                    'user' => $user,
+                    'last_seen' => time()
+                ];
                 $response = new Response(302, ['Location' => '/dashboard']);
                 $response->cookie('sid', $sid);
                 $connection->send($response);
@@ -129,9 +146,7 @@ $worker->onMessage = function (TcpConnection $connection, Request $request) use 
         }
 
         $viewPassword = $request->get('view_password');
-        $allTokens = $chatStorage->getAllTokens();
-        $chatHtml = "";
-        
+        $viewToken = $request->get('view_token');
         // Dapatkan semua user untuk mapping UUID ke Username
         $allUsers = $storage->getAll();
         $userMap = [];
@@ -139,37 +154,96 @@ $worker->onMessage = function (TcpConnection $connection, Request $request) use 
             $userMap[$u->uuid] = $u->username;
         }
 
+        $allTokens = $chatStorage->getAllTokens();
+        $chatHtml = "";
+        
+        $hasTokens = !empty($allTokens);
         foreach ($allTokens as $token) {
             try {
-                // Jika ada password dekripsi, gunakan CryptoPassService
-                if ($viewPassword) {
+                // Bersihkan token dari whitespace/newline jika ada
+                $token = trim((string)$token);
+                if (empty($token)) continue;
+
+                $decryptedText = null;
+                $decryptionType = "";
+
+                // 1. Coba dekripsi dengan viewPassword (jika ada)
+                // HANYA jika token ini yang sedang diminta (view_token) ATAU jika tidak ada spesifik token
+                if ($viewPassword && (!$viewToken || $viewToken === $token)) {
                     try {
                         $decryptedJson = CryptoPassService::decryptWithPassphrase($token, $viewPassword);
                         $data = json_decode($decryptedJson, true);
-                        if ($data && isset($data['userUuid'], $data['message'], $data['timestamp'])) {
-                            $senderName = $userMap[$data['userUuid']] ?? 'Unknown';
-                            $time = date('H:i', strtotime($data['timestamp']));
-                            $chatHtml .= "<div>[{$time}] <strong>{$senderName}</strong>: " . htmlspecialchars($data['message']) . " <span style='color:green; font-size:0.8em;'>(Decrypted w/ Pass)</span></div>";
+                        if ($data && isset($data['message'])) {
+                            $senderUuid = $data['userUuid'] ?? 'Unknown';
+                            $targetUuid = $data['targetUuid'] ?? null;
+
+                            // Filter Privasi untuk Password-based encryption
+                            if ($targetUuid !== null && $targetUuid !== $currentUser->uuid && $senderUuid !== $currentUser->uuid) {
+                                continue; // Lewati pesan ini jika bukan untuk saya dan saya bukan pengirimnya
+                            }
+
+                            $decryptedText = $data['message'];
+                            $senderName = $userMap[$senderUuid] ?? 'Unknown';
+                            $timeStr = $data['timestamp'] ?? date('c');
+                            $decryptionType = ($targetUuid !== null) ? "Private" : "Decrypted";
+                        }
+                    } catch (\Exception $e) {}
+                }
+
+                // 2. Coba dekripsi dengan App Key (GEC) jika belum berhasil
+                if ($decryptedText === null) {
+                    foreach ($userMap as $uuid => $name) {
+                        try {
+                            $chat = $gec->decrypt(ChatMessage::class, $token, ['userUuid' => $uuid]);
+                            if ($chat instanceof ChatMessage) {
+                                // Filter Privasi: Hanya tampilkan jika publik (targetUuid null) 
+                                // ATAU jika dikirim ke saya (targetUuid == currentUser->uuid)
+                                // ATAU jika saya pengirimnya (uuid == currentUser->uuid)
+                                if ($chat->targetUuid !== null && $chat->targetUuid !== $currentUser->uuid && $chat->userUuid !== $currentUser->uuid) {
+                                    continue 2; 
+                                }
+
+                                $decryptedText = $chat->message;
+                                $senderUuid = $chat->userUuid; // Pastikan menggunakan UUID dari entitas
+                                $senderName = $userMap[$senderUuid] ?? 'Unknown';
+                                $timeStr = $chat->timestamp;
+                                $decryptionType = ($chat->targetUuid !== null) ? "Private" : "App Key";
+                                break; 
+                            }
+                        } catch (\Exception $e) {
                             continue;
                         }
-                    } catch (\Exception $e) {
-                        // Gagal dekripsi dengan password, lanjut ke pengecekan berikutnya
                     }
                 }
 
-                // Cek apakah token ini adalah token GEC standar (App Key)
-                // Kita coba decrypt dengan setiap user yang ada sebagai hint bind
-                foreach ($userMap as $uuid => $name) {
+                // 3. Jika masih belum terdekripsi (atau memang sengaja dikunci password), 
+                // kita harus memastikan pesan terenkripsi ini memang ditujukan untuk user ini (atau publik)
+                if ($decryptedText === null) {
+                    // Cek metadata 'targetUuid' di level token jika tersedia
                     try {
-                        $chat = $gec->decrypt(ChatMessage::class, $token, ['userUuid' => $uuid]);
-                        if ($chat instanceof ChatMessage) {
-                            $time = date('H:i', strtotime($chat->timestamp));
-                            $chatHtml .= "<div>[{$time}] <strong>{$name}</strong>: " . htmlspecialchars($chat->message) . " <span style='color:blue; font-size:0.8em;'>(App Key)</span></div>";
-                            break; 
+                        $unpacked = \Kelompok1\CryptoGraphy\Token\EtmToken::unpack($token);
+                        $meta = $unpacked['meta'] ?? [];
+                        $tUuid = $meta['targetUuid'] ?? null;
+                        $sUuid = $meta['userUuid'] ?? null;
+
+                        // Jika pesan memiliki target dan saya bukan targetnya serta bukan pengirimnya, sembunyikan total
+                        if ($tUuid !== null && $tUuid !== $currentUser->uuid && $sUuid !== $currentUser->uuid) {
+                             continue;
                         }
-                    } catch (\Exception $e) {
-                        continue;
-                    }
+                    } catch (\Exception $e) {}
+                }
+
+                if ($decryptedText !== null) {
+                    $time = date('H:i', strtotime($timeStr));
+                    $color = ($decryptionType === "App Key") ? "blue" : (($decryptionType === "Private") ? "purple" : "green");
+                    $label = ($decryptionType === "Private") ? " (Private)" : " ({$decryptionType})";
+                    $chatHtml .= "<div class='msg-entry'>[{$time}] <strong>{$senderName}</strong>: " . htmlspecialchars($decryptedText) . " <span style='color:{$color}; font-size:0.8em;'>{$label}</span></div>";
+                } else {
+                     // Jika tidak bisa didekripsi, tampilkan tombol klik
+                     // _id adalah 16 byte hash ciphertext (32 char hex)
+                     $id = substr(hash('sha256', \Kelompok1\CryptoGraphy\Token\EtmToken::unpack($token)['value']), 0, 32);
+                     $isSelected = ($viewToken === $token) ? "border: 1px solid #007bff; background: #e7f3ff;" : "";
+                     $chatHtml .= "<div class='msg-entry' style='{$isSelected}'><span class='encrypted-msg' data-token='".htmlspecialchars($token)."' onclick='if(typeof openDecryptModal === \"function\") openDecryptModal(\"".addslashes($token)."\")'>🔒 ".htmlspecialchars($id)."</span></div>";
                 }
             } catch (\Exception $e) {
                 continue;
@@ -177,7 +251,11 @@ $worker->onMessage = function (TcpConnection $connection, Request $request) use 
         }
 
         if (!$chatHtml) {
-            $chatHtml = $viewPassword ? "<i>Tidak ada pesan yang bisa didekripsi dengan password tersebut.</i>" : "<i>Belum ada pesan atau masukkan password untuk melihat pesan rahasia.</i>";
+            if (!$hasTokens) {
+                $chatHtml = "<i>Belum ada pesan di forum ini.</i>";
+            } else {
+                $chatHtml = "<i>Tidak ada pesan yang bisa didekripsi. Masukkan password yang benar.</i>";
+            }
         }
 
         if ($path === '/api/chat') {
@@ -185,6 +263,40 @@ $worker->onMessage = function (TcpConnection $connection, Request $request) use 
         } else {
             $connection->send(new Response(200, [], RegisterPage::welcome($currentUser->username, $chatHtml)));
         }
+        return;
+    }
+
+    if ($path === '/api/users') {
+        if (!$currentUser) {
+            $connection->send(new Response(401, [], 'Unauthorized'));
+            return;
+        }
+        $onlineUsers = []; // Array of ['uuid' => '...', 'name' => '...']
+        $now = time();
+        foreach ($sessions as $s) {
+            $lastSeen = $s['last_seen'] ?? 0;
+            $diff = $now - $lastSeen;
+            if (isset($s['user']) && $diff < 90) { 
+                $onlineUsers[$s['user']->uuid] = (string)$s['user']->username;
+            }
+        }
+        
+        if ($request->get('format') === 'json') {
+            $connection->send(new Response(200, ['Content-Type' => 'application/json'], json_encode($onlineUsers)));
+            return;
+        }
+
+        if (empty($onlineUsers)) {
+            $html = "<i>Tidak ada user online</i>";
+        } else {
+            $html = "<ul>";
+            foreach ($onlineUsers as $uuid => $name) {
+                $status = ($uuid === $currentUser->uuid) ? " (Anda)" : "";
+                $html .= "<li><span style='color: green;'>●</span> " . htmlspecialchars($name) . $status . "</li>";
+            }
+            $html .= "</ul>";
+        }
+        $connection->send(new Response(200, ['Content-Type' => 'text/html'], $html));
         return;
     }
 
@@ -196,19 +308,37 @@ $worker->onMessage = function (TcpConnection $connection, Request $request) use 
 
         $messageText = (string)$request->post('message');
         $chatPassword = (string)$request->post('chat_password');
-
-        if ($messageText && $chatPassword) {
-            $chatData = [
-                'userUuid'  => $currentUser->uuid,
-                'message'   => $messageText,
-                'timestamp' => date('c')
-            ];
-            $json = json_encode($chatData);
-            $token = CryptoPassService::encryptWithPassphrase($json, $chatPassword);
-            $chatStorage->saveToken($token);
+        $targetUuid = $request->post('target_uuid');
+        if ($targetUuid === 'all' || empty($targetUuid)) {
+            $targetUuid = null;
         }
 
-        if ($request->header('X-Requested-With') === 'XMLHttpRequest' || $request->header('Accept') === 'application/json' || $request->post('message')) {
+        if ($messageText) {
+            $meta = [
+                'userUuid' => (string)$currentUser->uuid,
+                'targetUuid' => $targetUuid ? (string)$targetUuid : null
+            ];
+
+            if ($chatPassword) {
+                // Enkripsi Berbasis Password
+                $chatData = [
+                    'userUuid'  => $currentUser->uuid,
+                    'message'   => $messageText,
+                    'timestamp' => date('c'),
+                    'targetUuid' => $targetUuid
+                ];
+                $json = json_encode($chatData);
+                $token = CryptoPassService::encryptWithPassphrase($json, $chatPassword, meta: $meta);
+                $chatStorage->saveToken($token);
+            } else {
+                // Enkripsi Berbasis App Key (GEC)
+                $chat = new ChatMessage($currentUser->uuid, $messageText, date('c'), $targetUuid);
+                $token = $gec->encrypt($chat, meta: $meta);
+                $chatStorage->saveToken($token);
+            }
+        }
+
+        if ($request->header('X-Requested-With') === 'XMLHttpRequest' || $request->header('Accept') === 'application/json' || $request->post('_ajax')) {
              // For AJAX request, just send success
              $connection->send(new Response(200, [], 'OK'));
         } else {
@@ -218,7 +348,13 @@ $worker->onMessage = function (TcpConnection $connection, Request $request) use 
     }
 
     if ($path === '/logout') {
-        if ($sid) unset($sessions[$sid]);
+        if ($sid) {
+            // Berikan status offline sebelum hapus sesi
+            if (isset($sessions[$sid])) {
+                $sessions[$sid]['last_seen'] = 0; 
+            }
+            unset($sessions[$sid]);
+        }
         $response = new Response(302, ['Location' => '/login']);
         $response->cookie('sid', '', -1);
         $connection->send($response);
