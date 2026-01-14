@@ -1,13 +1,13 @@
 {
-  "name": "php83-fast-composer-manual",
-  "image": "php:8.3-cli",
+  "name": "php84-fast",
+  "image": "php:8.4-cli",
   "forwardPorts": [8000],
   "portsAttributes": {
     "8000": {
-      "label": "PHP Server",
+      "label": "PHP 8.4 Server",
       "onAutoForward": "openPreview"
     }
   },
   "postCreateCommand": "apt-get update && apt-get install -y git unzip curl && curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer && composer install --no-interaction --prefer-dist",
-  "postStartCommand": "php -S 0.0.0.0:8000 -t ."
+  "postStartCommand": " php server.php  start"
 }

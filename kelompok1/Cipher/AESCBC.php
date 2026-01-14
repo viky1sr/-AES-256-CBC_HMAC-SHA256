@@ -39,7 +39,7 @@ final class AESCBC
         }
 
         $padded = Padding::pad($plaintext, 16);
-        $ct = openssl_encrypt($padded, 'aes-256-cbc', $key, OPENSSL_RAW_DATA, $iv);
+        $ct = openssl_encrypt($padded, 'aes-256-cbc', $key, OPENSSL_RAW_DATA | OPENSSL_ZERO_PADDING, $iv);
         if ($ct === false) {
             throw new \RuntimeException('OpenSSL encrypt gagal');
         }
@@ -63,7 +63,7 @@ final class AESCBC
         if (strlen($iv) !== 16) {
             throw new \InvalidArgumentException('IV harus 16 byte');
         }
-        $padded = openssl_decrypt($ciphertext, 'aes-256-cbc', $key, OPENSSL_RAW_DATA, $iv);
+        $padded = openssl_decrypt($ciphertext, 'aes-256-cbc', $key, OPENSSL_RAW_DATA | OPENSSL_ZERO_PADDING, $iv);
         if ($padded === false) {
             throw new \RuntimeException('OpenSSL decrypt gagal');
         }

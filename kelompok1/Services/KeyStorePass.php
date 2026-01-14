@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Kelompok1\CryptoGraphy\Services;
 
+use Kelompok1\CryptoGraphy\MAC\HmacSha256;
 use Kelompok1\CryptoGraphy\KDF\PassphraseKDF;
 use Kelompok1\CryptoGraphy\Support\Base64Url;
 
@@ -23,13 +24,15 @@ final class KeyStorePass
         if ($iterations < 100000) throw new \InvalidArgumentException('Iterations minimal 100000.');
 
         $dir = dirname($path);
-        if (!is_dir($dir) && !mkdir($dir, 0700, true) && !is_dir($dir)) {
-            throw new \RuntimeException("Gagal membuat direktori: {$dir}");
+        if (!is_dir($dir)) {
+            if (!@mkdir($dir, 0777, true) && !is_dir($dir)) {
+                throw new \RuntimeException("Gagal membuat direktori: {$dir}");
+            }
         }
 
         $salt      = PassphraseKDF::randomSalt(16);
         $masterKey = PassphraseKDF::derivePBKDF2($passphrase, $salt, $iterations, 32);
-        $auth      = hash_hmac('sha256', self::AUTH_MSG, $masterKey, true);
+        $auth      = HmacSha256::mac($masterKey, self::AUTH_MSG);
 
         $payload = [
             'alg'  => 'pbkdf2-sha256',
@@ -41,7 +44,8 @@ final class KeyStorePass
         if ($json === false) throw new \RuntimeException('Gagal encode JSON keystore');
 
         if (file_put_contents($path, $json, LOCK_EX) === false) {
-            throw new \RuntimeException("Gagal menulis keystore: {$path}");
+            $err = error_get_last();
+            throw new \RuntimeException("Gagal menulis keystore: {$path}. Error: " . ($err['message'] ?? 'unknown'));
         }
         @chmod($path, 0600);
     }
@@ -65,8 +69,7 @@ final class KeyStorePass
         }
 
         $masterKey = PassphraseKDF::derivePBKDF2($passphrase, $salt, $iter, 32);
-        $calc      = hash_hmac('sha256', self::AUTH_MSG, $masterKey, true);
-        if (!hash_equals($auth, $calc)) {
+        if (!HmacSha256::verify($masterKey, self::AUTH_MSG, $auth)) {
             throw new \RuntimeException('Passphrase salah (auth gagal)');
         }
         return $masterKey; // 32B

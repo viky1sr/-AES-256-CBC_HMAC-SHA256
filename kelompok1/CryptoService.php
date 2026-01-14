@@ -153,7 +153,7 @@ final class CryptoService
      * @throws \InvalidArgumentException Jika masterKey kurang panjang.
      * @throws \RuntimeException         Jika OpenSSL encrypt gagal.
      */
-    public static function encrypt(string $plaintext, string $masterKey): string
+    public static function encrypt(string $plaintext, string $masterKey, ?array $meta = null): string
     {
         self::assertKey($masterKey);
 
@@ -170,7 +170,7 @@ final class CryptoService
         $mac = HmacSha256::mac($keyMac, $iv . $ct);
 
         // 4) Token base64(JSON)
-        return EtmToken::pack($iv, $ct, $mac);
+        return EtmToken::pack($iv, $ct, $mac, $meta);
     }
 
     /**
