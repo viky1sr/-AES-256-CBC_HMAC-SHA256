@@ -1,5 +1,5 @@
 {
-  "name": "php83-fast",
+  "name": "php83-superfast",
   "image": "mcr.microsoft.com/devcontainers/php:1-8.3",
   "features": {
     "ghcr.io/devcontainers/features/composer:1": {}
@@ -10,7 +10,5 @@
       "label": "PHP Server",
       "onAutoForward": "openPreview"
     }
-  },
-  "postCreateCommand": "composer install --no-interaction --prefer-dist",
-  "postStartCommand": "php -S 0.0.0.0:8000 -t ."
+  }
 }
