@@ -1,0 +1,12 @@
+{
+  "name": "php84-codespace",
+  "image": "php:8.4-cli",
+  "forwardPorts": [8000],
+  "portsAttributes": {
+    "8000": {
+      "label": "PHP 8.4 Server",
+      "onAutoForward": "openPreview"
+    }
+  },
+  "postStartCommand": "php -S 0.0.0.0:8000"
+}
