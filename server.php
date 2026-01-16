@@ -309,7 +309,7 @@ $worker->onMessage = function (TcpConnection $connection, Request $request) use 
                     $chatHtml .= "<div class='msg-entry' style='{$msgStyle}'>[{$time}] <strong style='color:{$nameColor}'>{$senderName}</strong>: " . htmlspecialchars($decryptedText) . " <span style='color:{$color}; font-size:0.8em; font-weight: bold;'>{$label}</span></div>";
                 } else {
                      // Jika tidak bisa didekripsi, tampilkan tombol klik
-                     // _id adalah 16 byte hash ciphertext (32 char hex)
+                     // Menampilkan 'Value Pointer' dari metadata token
                      $id = substr(hash('sha256', \Kelompok1\CryptoGraphy\Token\EtmToken::unpack($token)['value']), 0, 32);
                      $isSelected = ($viewToken === $token) ? "border: 1px solid #007bff; background: #e7f3ff;" : "";
                      $chatHtml .= "<div class='msg-entry' style='{$isSelected}'><span class='encrypted-msg' data-token='".htmlspecialchars($token)."' onclick='if(typeof openDecryptModal === \"function\") openDecryptModal(\"".addslashes($token)."\")'>🔒 ".htmlspecialchars($id)."</span></div>";

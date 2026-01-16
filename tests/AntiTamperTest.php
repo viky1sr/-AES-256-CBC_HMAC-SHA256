@@ -30,6 +30,7 @@ class AntiTamperTest
         $results = [];
         $results[] = $this->testPositiveStorage();
         $results[] = $this->testNegativeTamperId();
+        $results[] = $this->testNegativeTamperValuePointer();
         $results[] = $this->testNegativeTamperFileContent();
         $results[] = $this->testNegativeTamperMAC();
         
@@ -75,6 +76,34 @@ class AntiTamperTest
                 return ['name' => $name, 'status' => 'PASS', 'message' => 'Sistem menolak ID yang dimodifikasi (tidak ditemukan).'];
             }
             return ['name' => $name, 'status' => 'FAIL', 'message' => 'Sistem mengembalikan data untuk ID yang salah!'];
+        } catch (\Exception $e) {
+            return ['name' => $name, 'status' => 'FAIL', 'message' => $e->getMessage()];
+        }
+    }
+
+    private function testNegativeTamperValuePointer(): array
+    {
+        $name = "Negative Tamper Value Pointer Test";
+        try {
+            $token = CryptoService::encrypt("Data Value Pointer", $this->masterKey);
+            $id = $this->storage->save($token);
+            
+            $index = json_decode(file_get_contents($this->testDataDir . '/tamper_index.json'), true);
+            $pos = array_search($id, $index);
+            $folder = sprintf("%03d", floor($pos / 100));
+            $filePath = $this->testDataDir . '/' . $folder . '/' . $id . '.json';
+            
+            // Tamper 'value' (pointer) di file JSON menjadi null
+            $data = json_decode(file_get_contents($filePath), true);
+            $data['value'] = null;
+            file_put_contents($filePath, json_encode($data));
+            
+            $loadedToken = $this->storage->load($id);
+            if ($loadedToken === null) {
+                return ['name' => $name, 'status' => 'PASS', 'message' => 'Sistem menolak dekripsi karena pointer "value" di-tamper (null).'];
+            }
+            
+            return ['name' => $name, 'status' => 'FAIL', 'message' => 'Dekripsi tetap berhasil meskipun pointer "value" di JSON di-tamper!'];
         } catch (\Exception $e) {
             return ['name' => $name, 'status' => 'FAIL', 'message' => $e->getMessage()];
         }

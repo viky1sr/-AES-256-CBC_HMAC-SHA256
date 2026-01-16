@@ -20,10 +20,10 @@ Proyek ini mendemonstrasikan implementasi **Metode Kriptografi Modern** mengguna
 Salah satu fitur unik dalam sistem ini adalah penggunaan **16-Byte Reference ID** (32 karakter hex).
 
 - **Root Folder & ID**: Saat data disimpan, sistem menghasilkan hash 16-byte dari ciphertext. Hash ini berfungsi sebagai "Root Folder Pointer" dan nama file.
-- **Abstraksi Payload**: Apa yang Anda lihat di dashboard (misal: `🔒 bfc50ca0...`) **bukanlah** data rahasia aslinya, melainkan ID referensi.
+- **Abstraksi Payload**: Apa yang Anda lihat di dashboard (misal: `🔒 bfc50ca0...`) adalah **Value Pointer** yang diambil dari metadata JSON.
 - **Keunggulan Keamanan**:
-    - **Panjang Tetap**: Apapun panjang pesan aslinya, ID yang tampil selalu 16-byte. Ini mencegah penyerang mengetahui ukuran data asli (*Traffic Analysis Resistance*).
-    - **Indireksi**: User yang tidak memiliki otoritas hanya melihat ID acak tanpa pola, sedangkan payload asli tersimpan aman di file `.dat`.
+    - **Panjang Tetap**: Apapun panjang pesan aslinya, ID/Pointer yang tampil selalu 16-byte. Ini mencegah penyerang mengetahui ukuran data asli (*Traffic Analysis Resistance*).
+    - **Indireksi & Verifikasi**: User yang tidak memiliki otoritas hanya melihat ID acak tanpa pola. Sistem melakukan verifikasi ketat antara metadata `.json` dan payload `.dat` menggunakan pointer `value` tersebut. Jika pointer ini dimanipulasi (misal: di-null), proses dekripsi akan ditolak.
 
 ### 2. Mekanisme Encrypt-then-MAC (EtM)
 Sistem ini menggunakan alur EtM yang direkomendasikan secara kriptografis:
@@ -36,6 +36,41 @@ Untuk meningkatkan keamanan fisik data, kami membagi penyimpanan menjadi dua bag
 - **File Metadata (`.json`)**: Berisi IV, MAC, dan ID referensi.
 - **File Payload (`.dat`)**: Berisi **ciphertext biner asli (Raw AES-256-CBC)**. Data ini adalah hasil langsung dari algoritma enkripsi tanpa pembungkus tambahan, sehingga dapat diverifikasi menggunakan alat standar industri seperti OpenSSL CLI (asalkan kunci dan IV diketahui).
 - **Directory Splitting**: Folder dibagi secara otomatis (000, 001, dst) untuk performa dan menyulitkan pelacakan manual jika folder diintip secara langsung.
+
+#### Struktur & Field Metadata JSON
+Berikut adalah penjelasan fungsi setiap field dalam file `.json` metadata:
+
+| Field | Deskripsi | Peran dalam Sistem |
+| :--- | :--- | :--- |
+| `_id` | Unique ID 16-byte (32 char hex). | Berfungsi sebagai nama file dan pointer referensi data di disk. |
+| `iv` | Initialization Vector (Base64Url). | Vektor acak 16-byte yang memastikan ciphertext selalu unik meskipun plaintext sama. |
+| `mac` | Message Authentication Code. | Tag integritas HMAC-SHA256 untuk memvalidasi bahwa data tidak diubah (anti-tamper). |
+| `value` | Pointer Payload (Base64Url). | Berisi pointer ID referensi yang diverifikasi secara ketat untuk mengambil payload asli dari file `.dat`. |
+| `meta` | Objek Metadata Tambahan. | Menyimpan konteks data seperti pengirim, penerima, dan parameter algoritma. |
+| `meta.userUuid` | UUID Pengirim. | Identitas unik pengirim pesan untuk keperluan filter privasi dan mapping nama. |
+| `meta.targetUuid` | UUID Penerima (Null/ID). | Menentukan audiens pesan. Jika `null`, pesan bersifat publik (Global). |
+| `meta.kdf` | Key Derivation Function. | Informasi algoritma yang digunakan untuk menurunkan kunci dari password. |
+| `meta.kdf.alg` | Nama Algoritma KDF. | Menggunakan `pbkdf2-sha256` untuk penguatan password yang aman. |
+| `meta.kdf.salt` | Salt (Base64Url). | Nilai acak unik agar hasil hash password berbeda untuk setiap pesan. |
+| `meta.kdf.iter` | Jumlah Iterasi. | Diset pada **210.000 kali** untuk mencegah serangan brute-force secara efektif. |
+
+### 4. Definisi & Logika Pointer 16-Byte
+Pointer dalam sistem ini adalah **Reference ID** yang digunakan untuk menghubungkan metadata kontrol dengan payload ciphertext asli.
+
+#### Mengapa Harus 16-Byte (32 Karakter Hex)?
+1.  **Anonimitas & Privasi**: ID ini tidak memiliki kaitan logis dengan isi pesan. Seseorang yang melihat folder penyimpanan hanya melihat deretan karakter acak tanpa mengetahui ukuran atau jenis data di dalamnya.
+2.  **Panjang Tetap (Fixed Length)**: Menghasilkan tampilan UI yang seragam dan mencegah *Traffic Analysis* (analisis ukuran data).
+3.  **Unique File Identifier**: Digunakan sebagai nama file `.json` dan `.dat` serta menentukan struktur folder (*Directory Splitting*).
+
+#### Implementasi dalam Kode (Functions)
+Logika pointer ini tersebar di beberapa fungsi utama:
+
+| Fungsi | File | Peran Pointer |
+| :--- | :--- | :--- |
+| `save(token)` | `FileSecureStorage.php` | Menghasilkan ID 16-byte menggunakan `substr(hash('sha256', ciphertext), 0, 32)` dan menyimpannya ke field `value`. |
+| `load(id)` | `FileSecureStorage.php` | Mengambil data dari JSON, lalu memverifikasi apakah field `value` (pointer) cocok dengan ID file yang sedang diakses untuk mencegah manipulasi referensi. |
+| `getFolderName(id)` | `FileSecureStorage.php` | Menggunakan urutan index ID untuk menentukan folder penyimpanan (000, 001, dst). |
+| UI Rendering | `server.php` | Mengambil field `value` dari token untuk ditampilkan sebagai label `🔒 [Pointer ID]` di dashboard chat. |
 
 ---
 

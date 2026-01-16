@@ -82,7 +82,18 @@ final class FileSecureStorage
         }
         
         $data = json_decode(file_get_contents($jsonPath), true);
-        if (!$data || !isset($data['iv'], $data['mac'])) {
+        if (!$data || !isset($data['iv'], $data['mac'], $data['value'])) {
+            return null;
+        }
+
+        // Verifikasi bahwa value di JSON sesuai dengan ID yang diminta (sebagai pointer)
+        $pointer = Base64Url::decode($data['value']);
+        if ($pointer !== $id) {
+            return null;
+        }
+
+        $datPath = $this->baseDir . '/' . $folder . '/' . $pointer . '.dat';
+        if (!file_exists($datPath)) {
             return null;
         }
 
