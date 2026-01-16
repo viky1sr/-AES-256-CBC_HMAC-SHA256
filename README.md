@@ -75,7 +75,7 @@ Logika pointer ini tersebar di beberapa fungsi utama:
 ---
 
 ## Bahan Presentasi: Transparansi Kriptografi
-Sesuai dengan kebutuhan audit akademis, sistem ini menjamin:
+Sesuai dengan kebutuhan tugas UAS akademis, sistem ini menjamin:
 1. **Integritas Data Mentah**: File `.dat` menyimpan data yang sepenuhnya sesuai dengan standar **NIST FIPS 197 (AES)**.
 2. **Keterlacakan**: Metadata `.json` menyediakan IV dan MAC yang diperlukan untuk membuktikan keaslian ciphertext tersebut.
 3. **Audit**: Dosen atau penguji dapat memvalidasi bahwa sistem tidak melakukan "obfuscation" tambahan pada data rahasia selain dari proses enkripsi standar.
