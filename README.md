@@ -34,10 +34,17 @@ Sistem ini menggunakan alur EtM yang direkomendasikan secara kriptografis:
 ### 3. Arsitektur Penyimpanan Terfragmentasi
 Untuk meningkatkan keamanan fisik data, kami membagi penyimpanan menjadi dua bagian:
 - **File Metadata (`.json`)**: Berisi IV, MAC, dan ID referensi.
-- **File Payload (`.dat`)**: Berisi ciphertext asli yang dipisahkan dari metadatanya.
+- **File Payload (`.dat`)**: Berisi **ciphertext biner asli (Raw AES-256-CBC)**. Data ini adalah hasil langsung dari algoritma enkripsi tanpa pembungkus tambahan, sehingga dapat diverifikasi menggunakan alat standar industri seperti OpenSSL CLI (asalkan kunci dan IV diketahui).
 - **Directory Splitting**: Folder dibagi secara otomatis (000, 001, dst) untuk performa dan menyulitkan pelacakan manual jika folder diintip secara langsung.
 
 ---
+
+## Bahan Presentasi: Transparansi Kriptografi
+Sesuai dengan kebutuhan audit akademis, sistem ini menjamin:
+1. **Integritas Data Mentah**: File `.dat` menyimpan data yang sepenuhnya sesuai dengan standar **NIST FIPS 197 (AES)**.
+2. **Keterlacakan**: Metadata `.json` menyediakan IV dan MAC yang diperlukan untuk membuktikan keaslian ciphertext tersebut.
+3. **Audit**: Dosen atau penguji dapat memvalidasi bahwa sistem tidak melakukan "obfuscation" tambahan pada data rahasia selain dari proses enkripsi standar.
+4. **Database Explorer**: Fitur visualisasi data di `/database` untuk mempermudah presentasi data JSON dan biner DAT langsung dari browser.
 
 ## Fitur Keamanan Tambahan
 - **Encrypted Username**: Username tidak disimpan sebagai teks biasa, melainkan dienkripsi di level storage menggunakan App Key.

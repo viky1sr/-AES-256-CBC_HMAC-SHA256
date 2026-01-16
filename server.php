@@ -31,12 +31,25 @@ $gec       = new GlobalEntityCrypto($keyring, $secure);
 
 $host = $config['server']['host'] ?? '0.0.0.0';
 $port = $config['server']['port'] ?? 8080;
+$workerNum = $config['server']['worker_num'] ?? 4;
 
 $worker = new Worker("http://$host:$port");
-$worker->count = 1;
+$worker->count = $workerNum;
 
 // Simple session in-memory for demo (Workerman is persistent)
 $sessions = [];
+
+// Helper to get consistent color for username
+function getUsernameColor($username) {
+    $hash = md5($username);
+    // Use the first 6 chars of md5 to get a hex color
+    // but we want colors that are not too light (visible on white)
+    // so we limit the range
+    $r = hexdec(substr($hash, 0, 2)) % 200;
+    $g = hexdec(substr($hash, 2, 2)) % 200;
+    $b = hexdec(substr($hash, 4, 2)) % 200;
+    return sprintf("#%02x%02x%02x", $r, $g, $b);
+}
 
 $worker->onMessage = function (TcpConnection $connection, Request $request) use ($storage, $chatStorage, $gec, &$sessions) {
     $path = $request->path();
@@ -45,17 +58,66 @@ $worker->onMessage = function (TcpConnection $connection, Request $request) use 
     $currentSession = $sid ? ($sessions[$sid] ?? null) : null;
     $currentUser = $currentSession['user'] ?? null;
 
-    // Bersihkan sesi yang sudah mati (opsional tapi baik untuk memori)
-    // if (rand(1, 100) === 1) { // 1% chance
-    //     $now = time();
-    //     foreach ($sessions as $key => $s) {
-    //         if ($now - ($s['last_seen'] ?? 0) > 3600) unset($sessions[$key]);
-    //     }
-    // }
+    // Bersihkan sesi yang sudah mati (1 jam / 3600 detik)
+    if (rand(1, 100) === 1) { // 1% chance
+        $now = time();
+        foreach ($sessions as $key => $s) {
+            // Hanya hapus jika sudah benar-benar lewat 1 jam dari aktivitas terakhir
+            if ($now - ($s['last_seen'] ?? 0) > 3600) {
+                unset($sessions[$key]);
+            }
+        }
+    }
 
-    // Tambahkan timestamp aktivitas untuk cek online
+    // Tambahkan timestamp aktivitas untuk cek online dan menjaga sesi tetap hidup
     if ($sid && isset($sessions[$sid])) {
         $sessions[$sid]['last_seen'] = time();
+    }
+
+    if ($path === '/database') {
+        $dirs = [
+            __DIR__ . '/storage/data',
+            __DIR__ . '/storage/config/keystore/usernames'
+        ];
+        
+        $filesData = [];
+        foreach ($dirs as $dataDir) {
+            if (!is_dir($dataDir)) continue;
+
+            $iterator = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($dataDir));
+            foreach ($iterator as $file) {
+                if ($file->isFile()) {
+                    $ext = $file->getExtension();
+                    if (in_array($ext, ['json', 'dat'])) {
+                        $fullPath = $file->getRealPath();
+                        $relativePath = str_replace(__DIR__ . DIRECTORY_SEPARATOR, '', $fullPath);
+                        $content = file_get_contents($fullPath);
+                        
+                        // Perbaikan: Jika users.json, pastikan terformat rapi jika itu JSON array
+                        if ($file->getFilename() === 'users.json' || $file->getFilename() === 'chats_index.json') {
+                            $decoded = json_decode($content, true);
+                            if (is_array($decoded)) {
+                                $content = json_encode($decoded, JSON_PRETTY_PRINT);
+                            }
+                        }
+
+                        $filesData[] = [
+                            'path' => $relativePath,
+                            'name' => $file->getFilename(),
+                            'type' => $ext,
+                            'content' => $content,
+                            'size' => $file->getSize()
+                        ];
+                    }
+                }
+            }
+        }
+
+        // Urutkan berdasarkan path agar rapi
+        usort($filesData, fn($a, $b) => strcmp($a['path'], $b['path']));
+
+        $connection->send(new Response(200, [], RegisterPage::databaseView($filesData)));
+        return;
     }
 
     if ($path === '/' || $path === '/login') {
@@ -76,12 +138,15 @@ $worker->onMessage = function (TcpConnection $connection, Request $request) use 
             $user = $storage->findByUsername($username);
             if ($user && password_verify($password, $user->password)) {
                 $sid = bin2hex(random_bytes(16));
+                $now = time();
                 $sessions[$sid] = [
                     'user' => $user,
-                    'last_seen' => time()
+                    'last_seen' => $now
                 ];
                 $response = new Response(302, ['Location' => '/dashboard']);
-                $response->cookie('sid', $sid);
+                // Cookie sid berlaku 1 jam (3600 detik). 
+                // Set path ke '/' agar terbaca di semua endpoint.
+                $response->cookie('sid', $sid, $now + 3600, '/');
                 $connection->send($response);
             } else {
                 $connection->send(new Response(200, [], RegisterPage::loginForm('Username atau password salah!')));
@@ -235,9 +300,13 @@ $worker->onMessage = function (TcpConnection $connection, Request $request) use 
 
                 if ($decryptedText !== null) {
                     $time = date('H:i', strtotime($timeStr));
-                    $color = ($decryptionType === "App Key") ? "blue" : (($decryptionType === "Private") ? "purple" : "green");
+                    $color = ($decryptionType === "App Key") ? "#007bff" : (($decryptionType === "Private") ? "#6f42c1" : "#28a745");
                     $label = ($decryptionType === "Private") ? " (Private)" : " ({$decryptionType})";
-                    $chatHtml .= "<div class='msg-entry'>[{$time}] <strong>{$senderName}</strong>: " . htmlspecialchars($decryptedText) . " <span style='color:{$color}; font-size:0.8em;'>{$label}</span></div>";
+                    $nameColor = getUsernameColor($senderName);
+                    
+                    $msgStyle = ($decryptionType === "Private") ? "background: #f3e5f5; border-left: 4px solid #6f42c1; padding-left: 8px;" : "";
+                    
+                    $chatHtml .= "<div class='msg-entry' style='{$msgStyle}'>[{$time}] <strong style='color:{$nameColor}'>{$senderName}</strong>: " . htmlspecialchars($decryptedText) . " <span style='color:{$color}; font-size:0.8em; font-weight: bold;'>{$label}</span></div>";
                 } else {
                      // Jika tidak bisa didekripsi, tampilkan tombol klik
                      // _id adalah 16 byte hash ciphertext (32 char hex)
@@ -276,7 +345,8 @@ $worker->onMessage = function (TcpConnection $connection, Request $request) use 
         foreach ($sessions as $s) {
             $lastSeen = $s['last_seen'] ?? 0;
             $diff = $now - $lastSeen;
-            if (isset($s['user']) && $diff < 90) { 
+            // Anggap online jika ada aktivitas dalam 2 menit terakhir (120 detik)
+            if (isset($s['user']) && $diff < 120) { 
                 $onlineUsers[$s['user']->uuid] = (string)$s['user']->username;
             }
         }
@@ -292,7 +362,8 @@ $worker->onMessage = function (TcpConnection $connection, Request $request) use 
             $html = "<ul>";
             foreach ($onlineUsers as $uuid => $name) {
                 $status = ($uuid === $currentUser->uuid) ? " (Anda)" : "";
-                $html .= "<li><span style='color: green;'>●</span> " . htmlspecialchars($name) . $status . "</li>";
+                $nameColor = getUsernameColor($name);
+                $html .= "<li><span style='color: green;'>●</span> <strong style='color:{$nameColor}'>" . htmlspecialchars($name) . "</strong>" . $status . "</li>";
             }
             $html .= "</ul>";
         }

@@ -139,6 +139,7 @@ HTML;
                     <i>Memuat...</i>
                 </div>
                 <div class="links" style="text-align: left; margin-top: 40px;">
+                    <a href="/database" style="color: #007bff; font-weight: bold; display: block; margin-bottom: 10px;">📊 Database Explorer</a>
                     <a href="/logout" style="color: #dc3545; font-weight: bold;">🚪 Logout</a>
                 </div>
             </div>
@@ -156,6 +157,9 @@ HTML;
                     modalInput.focus();
                 }
             };
+
+            // Global store for decrypted messages in RAM
+            window.decryptedMessages = window.decryptedMessages || {};
 
             document.addEventListener('DOMContentLoaded', () => {
                 const chatBox = document.getElementById('chat-box');
@@ -179,10 +183,42 @@ HTML;
                             const response = await fetch(url);
                             if (response.ok) {
                                 const html = await response.text();
-                                const trimmedHtml = html.trim();
+                                
+                                // RAM-based temporary storage for decrypted entries
+                                const tempDiv = document.createElement('div');
+                                tempDiv.innerHTML = html;
+                                const entries = tempDiv.querySelectorAll('.msg-entry');
+                                
+                                entries.forEach(entry => {
+                                    const decryptedLabel = entry.querySelector('span[style*="font-weight: bold;"]');
+                                    if (decryptedLabel) {
+                                        // If this entry matches our current decrypt target, store it
+                                        if (globalViewToken) {
+                                            window.decryptedMessages[globalViewToken] = entry.innerHTML;
+                                        }
+                                    }
+                                });
+
+                                // Build final HTML merging new entries with RAM cache
+                                let finalHtml = '';
+                                entries.forEach(entry => {
+                                    const encryptedSpan = entry.querySelector('.encrypted-msg');
+                                    if (encryptedSpan) {
+                                        const token = encryptedSpan.getAttribute('data-token');
+                                        if (window.decryptedMessages[token]) {
+                                            finalHtml += '<div class="msg-entry">' + window.decryptedMessages[token] + '</div>';
+                                        } else {
+                                            finalHtml += entry.outerHTML;
+                                        }
+                                    } else {
+                                        finalHtml += entry.outerHTML;
+                                    }
+                                });
+
+                                const trimmedHtml = finalHtml.trim();
                                 if (trimmedHtml !== "" && lastChatHtml !== trimmedHtml) {
                                     const shouldScroll = chatBox.scrollTop + chatBox.clientHeight >= chatBox.scrollHeight - 50;
-                                    chatBox.innerHTML = html;
+                                    chatBox.innerHTML = finalHtml;
                                     lastChatHtml = trimmedHtml;
                                     if (shouldScroll) {
                                         chatBox.scrollTop = chatBox.scrollHeight;
@@ -317,5 +353,56 @@ HTML;
         </script>
 HTML;
         return self::render('Dashboard & Chat', $content);
+    }
+
+    public static function databaseView(array $files): string
+    {
+        $htmlFiles = "";
+        $currentDir = "";
+        
+        foreach ($files as $file) {
+            $path = $file['path'];
+            $type = $file['type'];
+            $content = $file['content'];
+            $size = $file['size'];
+            
+            // Ekstrak nama direktori untuk pengelompokan visual
+            $dirName = dirname($path);
+            if ($dirName !== $currentDir) {
+                $currentDir = $dirName;
+                $htmlFiles .= "<h3 style='margin-top: 30px; border-bottom: 2px solid #007bff; padding-bottom: 5px; color: #333;'>📁 $currentDir</h3>";
+            }
+
+            $displayContent = ($type === 'dat') ? bin2hex($content) : htmlspecialchars($content);
+            $class = ($type === 'dat') ? 'content-dat' : 'content-json';
+
+            $htmlFiles .= "
+            <div class='file-entry'>
+                <div class='file-header'>
+                    <strong>" . basename($path) . "</strong> ($size bytes)
+                </div>
+                <pre class='file-content $class'>$displayContent</pre>
+            </div>";
+        }
+
+        $content = "
+        <style>
+            .file-entry { margin-bottom: 15px; border: 1px solid #ddd; border-radius: 8px; overflow: hidden; background: #fff; text-align: left; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+            .file-header { background: #f8f9fa; padding: 8px 15px; border-bottom: 1px solid #ddd; font-family: monospace; font-size: 0.85rem; color: #555; }
+            .file-content { padding: 12px 15px; margin: 0; overflow-x: auto; font-size: 0.8rem; max-height: 350px; white-space: pre-wrap; word-break: break-all; line-height: 1.4; }
+            .content-dat { color: #d63384; background: #fffafb; font-family: 'Consolas', 'Monaco', monospace; letter-spacing: 1px; }
+            .content-json { color: #0d6efd; background: #f0f7ff; }
+            .back-link { margin-bottom: 20px; display: inline-block; color: #007bff; text-decoration: none; font-weight: bold; }
+            .back-link:hover { text-decoration: underline; }
+        </style>
+        <div style='text-align: left;'>
+            <a href='/dashboard' class='back-link'>&larr; Kembali ke Dashboard</a>
+            <div id='database-explorer'>
+                $htmlFiles
+            </div>
+        </div>
+        ";
+
+        return self::render('Database Explorer', $content);
     }
 }
