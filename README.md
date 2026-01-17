@@ -54,27 +54,46 @@ Berikut adalah penjelasan fungsi setiap field dalam file `.json` metadata:
 | `meta.kdf.salt` | Salt (Base64Url). | Nilai acak unik agar hasil hash password berbeda untuk setiap pesan. |
 | `meta.kdf.iter` | Jumlah Iterasi. | Diset pada **210.000 kali** untuk mencegah serangan brute-force secara efektif. |
 
-### 4. Definisi & Logika Pointer 16-Byte
-Pointer dalam sistem ini adalah **Reference ID** yang digunakan untuk menghubungkan metadata kontrol dengan payload ciphertext asli.
+### 4. Definition & Logika Pointer 16-Byte
+Pointer dalam sistem ini adalah **Reference ID** dan **Byte Offset Pointer** yang digunakan untuk menghubungkan metadata kontrol dengan payload ciphertext asli secara fisik.
 
 #### Mengapa Harus 16-Byte (32 Karakter Hex)?
 1.  **Anonimitas & Privasi**: ID ini tidak memiliki kaitan logis dengan isi pesan. Seseorang yang melihat folder penyimpanan hanya melihat deretan karakter acak tanpa mengetahui ukuran atau jenis data di dalamnya.
 2.  **Panjang Tetap (Fixed Length)**: Menghasilkan tampilan UI yang seragam dan mencegah *Traffic Analysis* (analisis ukuran data).
 3.  **Unique File Identifier**: Digunakan sebagai nama file `.json` dan `.dat` serta menentukan struktur folder (*Directory Splitting*).
 
+#### Logika Byte Offset Pointer (pct)
+Selain ID file, sistem menggunakan field `pct` sebagai pointer posisi byte dalam file `.dat`:
+- **fstat & ftell**: Saat menyimpan data di `.dat`, sistem menggunakan `ftell()` untuk mencatat posisi byte tepat di mana ciphertext dimulai. Posisi ini disimpan dalam field `pct` di metadata JSON.
+- **Dynamic Marking**: Untuk meningkatkan kerumitan, sistem menyisipkan byte acak di awal file `.dat` (penandaan posisi) yang panjangnya ditentukan oleh nilai dadu pertama (`itc[0]`).
+- **Precision Loading**: Saat memuat data, sistem menggunakan `fseek()` untuk langsung melompat ke pointer `pct` dan membaca ciphertext asli berdasarkan ukuran fisik file yang didapat dari `fstat()`.
+
 #### Implementasi dalam Kode (Functions)
 Logika pointer ini tersebar di beberapa fungsi utama:
 
 | Fungsi | File | Peran Pointer |
 | :--- | :--- | :--- |
-| `save(token)` | `FileSecureStorage.php` | Menghasilkan ID 16-byte menggunakan `substr(hash('sha256', ciphertext), 0, 32)` dan menyimpannya ke field `value`. |
-| `load(id)` | `FileSecureStorage.php` | Mengambil data dari JSON, lalu memverifikasi apakah field `value` (pointer) cocok dengan ID file yang sedang diakses untuk mencegah manipulasi referensi. |
+| `save(token)` | `FileSecureStorage.php` | Menghasilkan ID 16-byte, menyisipkan marker acak di `.dat`, dan mencatat byte offset menggunakan `ftell()`. |
+| `load(id)` | `FileSecureStorage.php` | Memverifikasi metadata, melakukan `fseek()` ke offset `pct`, dan membaca payload menggunakan `fstat()`. |
 | `getFolderName(id)` | `FileSecureStorage.php` | Menggunakan urutan index ID untuk menentukan folder penyimpanan (000, 001, dst). |
-| UI Rendering | `server.php` | Mengambil field `value` dari token untuk ditampilkan sebagai label `🔒 [Pointer ID]` di dashboard chat. |
+| `generateId(ciphertext, itc)` | `FileSecureStorage.php` | Logika utama pembuatan ID: Hash SHA256 -> Chunking -> Shuffling -> Seleksi Karakter (First/End). |
+| `getRandomItc()` | `FileSecureStorage.php` | Menghasilkan deretan angka acak (1-6) sebagai instruksi chunking dan marking dinamis. |
 
 ---
 
-## Bahan Presentasi: Transparansi Kriptografi
+## Detail Algoritma Pointer ID (16-Byte)
+
+Untuk presentasi, algoritma pembuatan `_id` telah ditingkatkan menjadi lebih kompleks untuk mencegah dekripsi sederhana:
+
+1.  **Hashing**: Ciphertext di-hash menggunakan SHA-256.
+2.  **Chunking Dinamis (itc)**: Hash dipotong menjadi bagian-bagian dengan panjang yang ditentukan secara acak (pola dadu 1-6) setiap kali enkripsi dilakukan.
+3.  **Iter Code (itc)**: Pola acak ini disimpan dalam field `itc` pada metadata agar sistem tetap bisa melacak asal-usul struktur hash tersebut.
+4.  **Seleksi Karakter (Ganjil/Genap)**:
+    -   ID akhir (32 karakter hex / 16 byte) diambil secara bergantian.
+    -   Karakter urutan ganjil (indeks genap 0, 2, 4...) diambil dari **awal** hash asli.
+    -   Karakter urutan genap (indeks ganjil 1, 3, 5...) diambil dari **akhir** hash asli.
+5.  **Pointer Cipher Text (pct)**: 16 karakter pertama dari hash asli disimpan sebagai referensi pelacak di field `pct`.
+6.  **Konservasi Metadata**: Sistem menjamin metadata asli (seperti informasi KDF, salt, dan iterasi) tetap utuh dan disimpan bersama metadata pointer.
 Sesuai dengan kebutuhan tugas UAS akademis, sistem ini menjamin:
 1. **Integritas Data Mentah**: File `.dat` menyimpan data yang sepenuhnya sesuai dengan standar **NIST FIPS 197 (AES)**.
 2. **Keterlacakan**: Metadata `.json` menyediakan IV dan MAC yang diperlukan untuk membuktikan keaslian ciphertext tersebut.

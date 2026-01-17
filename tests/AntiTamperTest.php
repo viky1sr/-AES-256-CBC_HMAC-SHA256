@@ -122,11 +122,16 @@ class AntiTamperTest
             $pos = array_search($id, $index);
             $folder = sprintf("%03d", floor($pos / 100));
             $datPath = $this->testDataDir . '/' . $folder . '/' . $id . '.dat';
+            $jsonPath = $this->testDataDir . '/' . $folder . '/' . $id . '.json';
             
-            // Tamper isi file .dat (ubah ciphertext asli)
-            $rawCiphertext = file_get_contents($datPath);
-            $rawCiphertext[0] = chr(ord($rawCiphertext[0]) ^ 0xFF); // Flip bits
-            file_put_contents($datPath, $rawCiphertext);
+            // Ambil offset pct dari JSON
+            $jsonData = json_decode(file_get_contents($jsonPath), true);
+            $pct = (int)$jsonData['pct'];
+
+            // Tamper isi file .dat tepat pada posisi ciphertext (setelah offset pct)
+            $rawContent = file_get_contents($datPath);
+            $rawContent[$pct] = chr(ord($rawContent[$pct]) ^ 0xFF); // Flip bits pada awal ciphertext
+            file_put_contents($datPath, $rawContent);
             
             // Coba load dan decrypt
             $loadedToken = $this->storage->load($id);

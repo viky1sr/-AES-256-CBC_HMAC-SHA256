@@ -27,6 +27,56 @@ final class FileSecureStorage
     }
 
     /**
+     * Menghasilkan Iter Code (itc) acak seperti pola dadu.
+     */
+    public function getRandomItc(int $count = 6): array
+    {
+        $itc = [];
+        for ($i = 0; $i < $count; $i++) {
+            $itc[] = rand(1, 6);
+        }
+        return $itc;
+    }
+
+    /**
+     * Menghasilkan ID 16-byte (32 char hex) dengan pola shuffle dan chunking.
+     */
+    private function generateId(string $ciphertext, array $itc): array
+    {
+        $hash = hash('sha256', $ciphertext);
+        
+        $chunks = [];
+        $offset = 0;
+        foreach ($itc as $len) {
+            // Pastikan offset tidak melebihi panjang hash
+            if ($offset >= strlen($hash)) break;
+            $chunks[] = substr($hash, $offset, $len);
+            $offset += $len;
+        }
+
+        // Shuffling berdasarkan pola dadu
+        $shuffled = implode('', $chunks);
+        
+        // Permintaan: "pola ganjil ambil dari string first, dan genap ambil dari string end"
+        $res = '';
+        $left = 0;
+        $right = strlen($hash) - 1;
+        for ($i = 0; $i < 32; $i++) {
+            if ($i % 2 === 0) { 
+                $res .= $hash[$left++];
+            } else {
+                $res .= $hash[$right--];
+            }
+        }
+
+        return [
+            'id' => $res,
+            'itc' => implode(',', $itc),
+            'pct' => substr($hash, 0, 16) 
+        ];
+    }
+
+    /**
      * Menyimpan token EtM ke dalam file JSON.
      * @param string $token Token base64(JSON {iv,value,mac,meta})
      * @return string ID unik (16-byte hex)
@@ -35,8 +85,10 @@ final class FileSecureStorage
     {
         $unpacked = EtmToken::unpack($token);
         
-        // _id adalah 16 byte hasil hash ciphertext (32 char hex)
-        $id = substr(hash('sha256', $unpacked['value']), 0, 32);
+        // Gunakan itc acak dinamis
+        $itc = $this->getRandomItc();
+        $gen = $this->generateId($unpacked['value'], $itc);
+        $id = $gen['id'];
         
         $indexData = $this->loadIndex();
         if (!in_array($id, $indexData)) {
@@ -50,18 +102,32 @@ final class FileSecureStorage
             @mkdir($dir, 0777, true);
         }
 
+        // Simpan ciphertext asli di file terpisah dengan mekanisme pointer
+        $datPath = $dir . '/' . $id . '.dat';
+        $fp = fopen($datPath, 'wb');
+        
+        // Pola: "pointer .dat di tandain :2 berati dengna dadu ke 2 chunk pertama dengan pola"
+        // Kita gunakan itc[0] sebagai padding awal/marker posisi
+        $offset = $itc[0] % 4; // Variasi offset kecil agar tetap efisien
+        if ($offset > 0) {
+            fwrite($fp, random_bytes($offset));
+        }
+        
+        $pctValue = ftell($fp); // Ambil posisi byte saat ini
+        fwrite($fp, $unpacked['value']);
+        fclose($fp);
+
         $payload = [
             '_id' => $id,
+            'pct' => $pctValue, // Sekarang menyimpan offset byte di file .dat
+            'itc' => $gen['itc'],
             'iv' => Base64Url::encode($unpacked['iv']),
             'mac' => Base64Url::encode($unpacked['mac']),
-            'value' => Base64Url::encode($id), // Value sekarang hanya ID 16-byte
-            'meta' => $unpacked['meta'] ?? null
+            'value' => Base64Url::encode($id),
+            'meta' => $unpacked['meta'] ?? null 
         ];
 
         file_put_contents($dir . '/' . $id . '.json', json_encode($payload, JSON_PRETTY_PRINT));
-        
-        // Simpan ciphertext asli di file terpisah
-        file_put_contents($dir . '/' . $id . '.dat', $unpacked['value']);
         
         return $id;
     }
@@ -82,7 +148,7 @@ final class FileSecureStorage
         }
         
         $data = json_decode(file_get_contents($jsonPath), true);
-        if (!$data || !isset($data['iv'], $data['mac'], $data['value'])) {
+        if (!$data || !isset($data['iv'], $data['mac'], $data['value'], $data['pct'])) {
             return null;
         }
 
@@ -97,7 +163,17 @@ final class FileSecureStorage
             return null;
         }
 
-        $ciphertext = file_get_contents($datPath);
+        // Baca payload berdasarkan pointer pct (byte offset)
+        $fp = fopen($datPath, 'rb');
+        fseek($fp, (int)$data['pct']);
+        
+        // Ambil ukuran file untuk menghitung panjang ciphertext
+        $stats = fstat($fp);
+        $totalSize = $stats['size'];
+        $ciphertextLen = $totalSize - (int)$data['pct'];
+        
+        $ciphertext = fread($fp, $ciphertextLen);
+        fclose($fp);
         
         return EtmToken::pack(
             Base64Url::decode($data['iv']),

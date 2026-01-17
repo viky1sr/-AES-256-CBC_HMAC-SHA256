@@ -259,3 +259,87 @@ TEST RUN: 2026-01-16 15:02:29
 
 ----------------------------------------
 
+========================================
+TEST RUN: 2026-01-17 02:05:07
+========================================
+
+[PASS] Positive Storage Test: Data disimpan dan dimuat dengan benar.
+[PASS] Negative Tamper ID Test: Sistem menolak ID yang dimodifikasi (tidak ditemukan).
+[PASS] Negative Tamper Value Pointer Test: Sistem menolak dekripsi karena pointer "value" di-tamper (null).
+[PASS] Negative Tamper File Content Test: MAC gagal verifikasi karena ciphertext di-tamper. Aman.
+[PASS] Negative Tamper MAC Test: Sistem menolak MAC yang tidak valid.
+[PASS] Core EtM Test: Enkripsi/Dekripsi EtM berhasil.
+[PASS] Passphrase EtM Test: Enkripsi/Dekripsi berbasis Passphrase berhasil.
+[PASS] Key Separation Test: HKDF berhasil menurunkan kunci yang berbeda untuk tujuan berbeda.
+[PASS] Invalid Key Test: Sistem menolak kunci yang tidak aman (terlalu pendek).
+[PASS] Register Save & Load Test: User berhasil disimpan dan ditemukan kembali (username otomatis didekripsi).
+[PASS] Duplicate Register Test: Sistem menolak username duplikat dengan benar.
+[PASS] Username Storage Encryption Test: Username tersimpan terenkripsi sebagai referensi file user.json.
+[PASS] Public Chat Visibility Test: Pesan publik terlihat oleh semua user (melalui metadata token).
+[PASS] Private Chat Visibility Test: Pesan privat hanya terlihat oleh pengirim dan penerima yang sah.
+
+----------------------------------------
+
+========================================
+TEST RUN: 2026-01-17 02:09:00
+========================================
+
+[PASS] Positive Storage Test: Data disimpan dan dimuat dengan benar.
+[PASS] Negative Tamper ID Test: Sistem menolak ID yang dimodifikasi (tidak ditemukan).
+[PASS] Negative Tamper Value Pointer Test: Sistem menolak dekripsi karena pointer "value" di-tamper (null).
+[PASS] Negative Tamper File Content Test: MAC gagal verifikasi karena ciphertext di-tamper. Aman.
+[PASS] Negative Tamper MAC Test: Sistem menolak MAC yang tidak valid.
+[PASS] Core EtM Test: Enkripsi/Dekripsi EtM berhasil.
+[PASS] Passphrase EtM Test: Enkripsi/Dekripsi berbasis Passphrase berhasil.
+[PASS] Key Separation Test: HKDF berhasil menurunkan kunci yang berbeda untuk tujuan berbeda.
+[PASS] Invalid Key Test: Sistem menolak kunci yang tidak aman (terlalu pendek).
+[PASS] Register Save & Load Test: User berhasil disimpan dan ditemukan kembali (username otomatis didekripsi).
+[PASS] Duplicate Register Test: Sistem menolak username duplikat dengan benar.
+[PASS] Username Storage Encryption Test: Username tersimpan terenkripsi sebagai referensi file user.json.
+[PASS] Public Chat Visibility Test: Pesan publik terlihat oleh semua user (melalui metadata token).
+[PASS] Private Chat Visibility Test: Pesan privat hanya terlihat oleh pengirim dan penerima yang sah.
+
+----------------------------------------
+
+========================================
+TEST RUN: 2026-01-17 02:21:02
+========================================
+
+[PASS] Positive Storage Test: Data disimpan dan dimuat dengan benar.
+[PASS] Negative Tamper ID Test: Sistem menolak ID yang dimodifikasi (tidak ditemukan).
+[PASS] Negative Tamper Value Pointer Test: Sistem menolak dekripsi karena pointer "value" di-tamper (null).
+[FAIL] Negative Tamper File Content Test: Dekripsi berhasil meskipun ciphertext di-tamper! (Sangat Bahaya)
+[PASS] Negative Tamper MAC Test: Sistem menolak MAC yang tidak valid.
+[PASS] Core EtM Test: Enkripsi/Dekripsi EtM berhasil.
+[PASS] Passphrase EtM Test: Enkripsi/Dekripsi berbasis Passphrase berhasil.
+[PASS] Key Separation Test: HKDF berhasil menurunkan kunci yang berbeda untuk tujuan berbeda.
+[PASS] Invalid Key Test: Sistem menolak kunci yang tidak aman (terlalu pendek).
+[PASS] Register Save & Load Test: User berhasil disimpan dan ditemukan kembali (username otomatis didekripsi).
+[PASS] Duplicate Register Test: Sistem menolak username duplikat dengan benar.
+[PASS] Username Storage Encryption Test: Username tersimpan terenkripsi sebagai referensi file user.json.
+[PASS] Public Chat Visibility Test: Pesan publik terlihat oleh semua user (melalui metadata token).
+[PASS] Private Chat Visibility Test: Pesan privat hanya terlihat oleh pengirim dan penerima yang sah.
+
+----------------------------------------
+
+========================================
+TEST RUN: 2026-01-17 02:22:28
+========================================
+
+[PASS] Positive Storage Test: Data disimpan dan dimuat dengan benar.
+[PASS] Negative Tamper ID Test: Sistem menolak ID yang dimodifikasi (tidak ditemukan).
+[PASS] Negative Tamper Value Pointer Test: Sistem menolak dekripsi karena pointer "value" di-tamper (null).
+[PASS] Negative Tamper File Content Test: MAC gagal verifikasi karena ciphertext di-tamper. Aman.
+[PASS] Negative Tamper MAC Test: Sistem menolak MAC yang tidak valid.
+[PASS] Core EtM Test: Enkripsi/Dekripsi EtM berhasil.
+[PASS] Passphrase EtM Test: Enkripsi/Dekripsi berbasis Passphrase berhasil.
+[PASS] Key Separation Test: HKDF berhasil menurunkan kunci yang berbeda untuk tujuan berbeda.
+[PASS] Invalid Key Test: Sistem menolak kunci yang tidak aman (terlalu pendek).
+[PASS] Register Save & Load Test: User berhasil disimpan dan ditemukan kembali (username otomatis didekripsi).
+[PASS] Duplicate Register Test: Sistem menolak username duplikat dengan benar.
+[PASS] Username Storage Encryption Test: Username tersimpan terenkripsi sebagai referensi file user.json.
+[PASS] Public Chat Visibility Test: Pesan publik terlihat oleh semua user (melalui metadata token).
+[PASS] Private Chat Visibility Test: Pesan privat hanya terlihat oleh pengirim dan penerima yang sah.
+
+----------------------------------------
+
