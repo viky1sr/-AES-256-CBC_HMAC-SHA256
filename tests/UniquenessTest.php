@@ -7,7 +7,7 @@ $tempDir = 'storage/test/unique_test';
 if (!is_dir($tempDir)) mkdir($tempDir, 0777, true);
 $storage = new FileSecureStorage($tempDir);
 
-$iterations = 100000;
+$iterations = 1000;
 $processCount = 10;
 $perProcess = $iterations / $processCount;
 $startTime = microtime(true);

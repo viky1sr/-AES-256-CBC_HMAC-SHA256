@@ -127,7 +127,11 @@ final class RegisterStorage
         $allData = $rawContent ? $this->serializer->deserialize($rawContent) : [];
         $allData[] = $storedUser->toArray();
 
-        file_put_contents($this->filePath, $this->serializer->serialize($allData));
+        $dir = dirname($this->filePath);
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0777, true);
+        }
+        file_put_contents($this->filePath, $this->serializer->serialize($allData), LOCK_EX);
     }
 
     public function findByUsername(string $username): ?User

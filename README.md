@@ -38,46 +38,43 @@ Untuk meningkatkan keamanan fisik data, kami membagi penyimpanan menjadi dua bag
 - **Directory Splitting**: Folder dibagi secara otomatis (000, 001, dst) untuk performa dan menyulitkan pelacakan manual jika folder diintip secara langsung.
 
 #### Struktur & Field Metadata JSON
-Berikut adalah penjelasan fungsi setiap field dalam file `.json` metadata:
+Berikut adalah penjelasan fungsi setiap field dalam file `.json` metadata yang telah diperbarui dengan pola hexadecimal:
 
 | Field | Deskripsi | Peran dalam Sistem |
 | :--- | :--- | :--- |
 | `_id` | Unique ID 16-byte (32 char hex). | Berfungsi sebagai nama file dan pointer referensi data di disk. |
+| `pct` | Byte Offset Pointers (Hex). | Daftar 6 offset byte fisik (dalam format Hex) yang menunjuk ke setiap chunk ciphertext di file `.dat`. |
+| `itc` | Iter Code / Dice Markers (Hex). | Daftar 6 nilai dadu (1-6 dalam Hex) yang digunakan sebagai marker autentikasi sebelum setiap chunk data. |
 | `iv` | Initialization Vector (Base64Url). | Vektor acak 16-byte yang memastikan ciphertext selalu unik meskipun plaintext sama. |
 | `mac` | Message Authentication Code. | Tag integritas HMAC-SHA256 untuk memvalidasi bahwa data tidak diubah (anti-tamper). |
 | `value` | Pointer Payload (Base64Url). | Berisi pointer ID referensi yang diverifikasi secara ketat untuk mengambil payload asli dari file `.dat`. |
-| `meta` | Objek Metadata Tambahan. | Menyimpan konteks data seperti pengirim, penerima, dan parameter algoritma. |
-| `meta.userUuid` | UUID Pengirim. | Identitas unik pengirim pesan untuk keperluan filter privasi dan mapping nama. |
-| `meta.targetUuid` | UUID Penerima (Null/ID). | Menentukan audiens pesan. Jika `null`, pesan bersifat publik (Global). |
-| `meta.kdf` | Key Derivation Function. | Informasi algoritma yang digunakan untuk menurunkan kunci dari password. |
-| `meta.kdf.alg` | Nama Algoritma KDF. | Menggunakan `pbkdf2-sha256` untuk penguatan password yang aman. |
-| `meta.kdf.salt` | Salt (Base64Url). | Nilai acak unik agar hasil hash password berbeda untuk setiap pesan. |
-| `meta.kdf.iter` | Jumlah Iterasi. | Diset pada **210.000 kali** untuk mencegah serangan brute-force secara efektif. |
+| `meta` | Objek Metadata Tambahan. | Menyimpan konteks data seperti pengirim, penerima, dan parameter algoritma (KDF, Salt, Iterasi). |
 
 ### 4. Definition & Logika Pointer 16-Byte
-Pointer dalam sistem ini adalah **Reference ID** dan **Byte Offset Pointer** yang digunakan untuk menghubungkan metadata kontrol dengan payload ciphertext asli secara fisik.
+Pointer dalam sistem ini adalah **Reference ID** dan **Multi-Chunk Byte Offset Pointer** yang digunakan untuk menghubungkan metadata kontrol dengan payload ciphertext asli secara fisik.
 
 #### Mengapa Harus 16-Byte (32 Karakter Hex)?
 1.  **Anonimitas & Privasi**: ID ini tidak memiliki kaitan logis dengan isi pesan. Seseorang yang melihat folder penyimpanan hanya melihat deretan karakter acak tanpa mengetahui ukuran atau jenis data di dalamnya.
 2.  **Panjang Tetap (Fixed Length)**: Menghasilkan tampilan UI yang seragam dan mencegah *Traffic Analysis* (analisis ukuran data).
 3.  **Unique File Identifier**: Digunakan sebagai nama file `.json` dan `.dat` serta menentukan struktur folder (*Directory Splitting*).
 
-#### Logika Byte Offset Pointer (pct)
-Selain ID file, sistem menggunakan field `pct` sebagai pointer posisi byte dalam file `.dat`:
-- **fstat & ftell**: Saat menyimpan data di `.dat`, sistem menggunakan `ftell()` untuk mencatat posisi byte tepat di mana ciphertext dimulai. Posisi ini disimpan dalam field `pct` di metadata JSON.
-- **Dynamic Marking**: Untuk meningkatkan kerumitan, sistem menyisipkan byte acak di awal file `.dat` (penandaan posisi) yang panjangnya ditentukan oleh nilai dadu pertama (`itc[0]`).
-- **Precision Loading**: Saat memuat data, sistem menggunakan `fseek()` untuk langsung melompat ke pointer `pct` dan membaca ciphertext asli berdasarkan ukuran fisik file yang didapat dari `fstat()`.
+#### Logika Multi-Chunk Hex Dice Marking (pct & itc)
+Sistem menggunakan field `pct` dan `itc` dalam format **Hexadecimal** untuk manajemen data fisik:
+- **Chunking**: Ciphertext dibagi menjadi 6 bagian (chunk) yang disimpan di file `.dat`.
+- **Hex Dice Markers**: Sebelum setiap chunk, sistem menyisipkan 1 byte 'Marker' yang nilainya diambil dari `itc` (pola dadu 1-6 unik).
+- **Hex Byte Offsets (pct)**: Sistem menggunakan `ftell()` untuk mencatat posisi byte setiap chunk tepat setelah marker disisipkan. Daftar 6 posisi ini disimpan dalam format hex di field `pct`.
+- **Precision Loading**: Saat memuat data, sistem melakukan `fseek()` ke setiap offset `pct`, memverifikasi marker `itc`, dan menggabungkan kembali 6 chunk tersebut menjadi ciphertext utuh.
 
 #### Implementasi dalam Kode (Functions)
 Logika pointer ini tersebar di beberapa fungsi utama:
 
 | Fungsi | File | Peran Pointer |
 | :--- | :--- | :--- |
-| `save(token)` | `FileSecureStorage.php` | Menghasilkan ID 16-byte, menyisipkan marker acak di `.dat`, dan mencatat byte offset menggunakan `ftell()`. |
-| `load(id)` | `FileSecureStorage.php` | Memverifikasi metadata, melakukan `fseek()` ke offset `pct`, dan membaca payload menggunakan `fstat()`. |
+| `save(token)` | `FileSecureStorage.php` | Membagi data jadi 6 chunk, menyisipkan marker, mencatat offset via `ftell()`, dan simpan dalam format hex. |
+| `load(id)` | `FileSecureStorage.php` | Mendecode hex `pct` & `itc`, verifikasi marker tiap chunk via `fseek()`, dan rekonstruksi ciphertext. |
 | `getFolderName(id)` | `FileSecureStorage.php` | Menggunakan urutan index ID untuk menentukan folder penyimpanan (000, 001, dst). |
 | `generateId(ciphertext, itc)` | `FileSecureStorage.php` | Logika utama pembuatan ID: Hash SHA256 -> Chunking -> Shuffling -> Seleksi Karakter (First/End). |
-| `getRandomItc()` | `FileSecureStorage.php` | Menghasilkan deretan angka acak (1-6) sebagai instruksi chunking dan marking dinamis. |
+| `getRandomItc()` | `FileSecureStorage.php` | Menghasilkan 6 angka unik (1-6) sebagai pola dadu dinamis. |
 
 ---
 

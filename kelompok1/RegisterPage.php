@@ -122,7 +122,7 @@ HTML;
                             <input type="text" name="message" id="chat-input" placeholder="Tulis pesan rahasia..." required style="flex: 1; margin: 0;">
                         </div>
                         <div style="display: flex; gap: 10px;">
-                            <input type="password" name="chat_password" id="chat-password" placeholder="Password Enkripsi" required style="flex: 1; margin: 0;">
+                            <input type="password" name="chat_password" id="chat-password" placeholder="Password Enkripsi" style="flex: 1; margin: 0;">
                             <button type="submit" id="chat-btn" style="width: auto;">Kirim Terenkripsi</button>
                         </div>
                     </div>
@@ -171,17 +171,20 @@ HTML;
                 const modalCancel = document.getElementById('modal-cancel-btn');
 
                 if (chatBox && chatForm && modal && modalSubmit && modalCancel) {
-                    // Polling State
-                    let globalViewPassword = '';
-                    let globalViewToken = '';
-                    let lastChatHtml = '';
+                // Polling State
+                let globalViewPassword = '';
+                let globalViewToken = '';
+                let lastChatHtml = '';
+                let isFetching = false;
 
-                    async function fetchChat() {
-                        try {
-                            const url = '/api/chat?view_password=' + encodeURIComponent(globalViewPassword) + 
-                                        '&view_token=' + encodeURIComponent(globalViewToken);
-                            const response = await fetch(url);
-                            if (response.ok) {
+                async function fetchChat() {
+                    if (isFetching) return;
+                    isFetching = true;
+                    try {
+                        const url = '/api/chat?view_password=' + encodeURIComponent(globalViewPassword) + 
+                                    '&view_token=' + encodeURIComponent(globalViewToken);
+                        const response = await fetch(url);
+                        if (response.ok) {
                                 const html = await response.text();
                                 
                                 // RAM-based temporary storage for decrypted entries
@@ -227,6 +230,8 @@ HTML;
                             }
                         } catch (e) {
                             console.error("Gagal mengambil chat:", e);
+                        } finally {
+                            isFetching = false;
                         }
                     }
 
@@ -305,8 +310,8 @@ HTML;
                     }, true);
 
                     // Polling
-                    setInterval(fetchChat, 3000);
-                    setInterval(fetchUsers, 4000);
+                    setInterval(fetchChat, 10000);
+                    setInterval(fetchUsers, 10000);
                     
                     fetchUsers();
                     fetchChat();
@@ -318,8 +323,19 @@ HTML;
                         const formData = new FormData(chatForm);
                         formData.append('_ajax', '1');
                         const btn = document.getElementById('chat-btn');
+                        const chatInput = document.getElementById('chat-input');
+                        const chatPassField = document.getElementById('chat-password');
+                        
+                        // Simpan nilai untuk pembersihan nanti
+                        const messageText = chatInput.value;
+                        const chatPass = formData.get('chat_password');
+
                         btn.disabled = true;
                         btn.innerText = 'Mengirim...';
+
+                        // Membersihkan input segera untuk kesan "real-time" (Optimistic UI)
+                        chatInput.value = '';
+                        chatPassField.value = '';
 
                         try {
                             const response = await fetch('/chat', {
@@ -327,22 +343,20 @@ HTML;
                                 body: formData
                             });
                             if (response.ok) {
-                                document.getElementById('chat-input').value = '';
-                                document.getElementById('chat-password').value = ''; // Clear password field after send
-                                const chatPass = formData.get('chat_password');
                                 if (chatPass) {
-                                    // Cari token terbaru yang baru saja dikirim (ini agak tricky di polling, 
-                                    // tapi kita bisa clear view_token agar polling mengambil data terbaru secara normal
-                                    // atau biarkan saja jika user ingin fokus ke pesan tertentu)
                                     globalViewPassword = chatPass;
-                                    globalViewToken = ''; // Reset token filter agar pesan baru bisa tampil
+                                    globalViewToken = ''; 
                                     lastChatHtml = '';
                                 }
                                 await fetchChat();
                                 chatBox.scrollTop = chatBox.scrollHeight;
+                            } else {
+                                throw new Error("Gagal mengirim");
                             }
                         } catch (e) {
                             alert("Gagal mengirim pesan");
+                            // Kembalikan teks jika gagal
+                            chatInput.value = messageText;
                         } finally {
                             btn.disabled = false;
                             btn.innerText = 'Kirim Terenkripsi';

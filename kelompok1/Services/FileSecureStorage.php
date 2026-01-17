@@ -27,15 +27,13 @@ final class FileSecureStorage
     }
 
     /**
-     * Menghasilkan Iter Code (itc) acak seperti pola dadu.
+     * Menghasilkan Iter Code (itc) acak seperti pola dadu (1-6 unik).
      */
     public function getRandomItc(int $count = 6): array
     {
-        $itc = [];
-        for ($i = 0; $i < $count; $i++) {
-            $itc[] = rand(1, 6);
-        }
-        return $itc;
+        $numbers = range(1, 6);
+        shuffle($numbers);
+        return $numbers;
     }
 
     /**
@@ -72,7 +70,7 @@ final class FileSecureStorage
         return [
             'id' => $res,
             'itc' => implode(',', $itc),
-            'pct' => substr($hash, 0, 16) 
+            'pct' => implode('', $itc) // pct sekarang 6 digit sesuai itc
         ];
     }
 
@@ -102,25 +100,40 @@ final class FileSecureStorage
             @mkdir($dir, 0777, true);
         }
 
-        // Simpan ciphertext asli di file terpisah dengan mekanisme pointer
+        // Simpan ciphertext asli di file terpisah dengan mekanisme chunking & marking
         $datPath = $dir . '/' . $id . '.dat';
         $fp = fopen($datPath, 'wb');
         
-        // Pola: "pointer .dat di tandain :2 berati dengna dadu ke 2 chunk pertama dengan pola"
-        // Kita gunakan itc[0] sebagai padding awal/marker posisi
-        $offset = $itc[0] % 4; // Variasi offset kecil agar tetap efisien
-        if ($offset > 0) {
-            fwrite($fp, random_bytes($offset));
+        $ciphertext = $unpacked['value'];
+        $totalLen = strlen($ciphertext);
+        $chunkSize = (int)ceil($totalLen / 6);
+        $offsets = [];
+
+        // Bagi menjadi 6 chunk sesuai itc
+        for ($i = 0; $i < 6; $i++) {
+            // Tulis "Dice Marker" (hex value dari itc[$i])
+            fwrite($fp, chr($itc[$i]));
+            
+            // Catat offset ciphertext (posisi setelah marker)
+            $offsets[] = ftell($fp);
+            
+            // Tulis chunk ciphertext
+            $start = $i * $chunkSize;
+            $chunk = substr($ciphertext, $start, $chunkSize);
+            if ($chunk !== false) {
+                fwrite($fp, $chunk);
+            }
         }
-        
-        $pctValue = ftell($fp); // Ambil posisi byte saat ini
-        fwrite($fp, $unpacked['value']);
         fclose($fp);
+
+        // Konversi itc dan offsets ke hexadecimal untuk metadata
+        $itcHex = array_map(fn($v) => dechex($v), $itc);
+        $offsetsHex = array_map(fn($v) => dechex($v), $offsets);
 
         $payload = [
             '_id' => $id,
-            'pct' => $pctValue, // Sekarang menyimpan offset byte di file .dat
-            'itc' => $gen['itc'],
+            'pct' => implode(',', $offsetsHex), // Daftar offset byte pointer dalam format HEX
+            'itc' => implode(',', $itcHex),     // Daftar dadu marker dalam format HEX
             'iv' => Base64Url::encode($unpacked['iv']),
             'mac' => Base64Url::encode($unpacked['mac']),
             'value' => Base64Url::encode($id),
@@ -148,7 +161,7 @@ final class FileSecureStorage
         }
         
         $data = json_decode(file_get_contents($jsonPath), true);
-        if (!$data || !isset($data['iv'], $data['mac'], $data['value'], $data['pct'])) {
+        if (!$data || !isset($data['iv'], $data['mac'], $data['value'], $data['pct'], $data['itc'])) {
             return null;
         }
 
@@ -163,21 +176,51 @@ final class FileSecureStorage
             return null;
         }
 
-        // Baca payload berdasarkan pointer pct (byte offset)
-        $fp = fopen($datPath, 'rb');
-        fseek($fp, (int)$data['pct']);
+        // Ambil daftar offset dan itc
+        $offsets = array_map('hexdec', explode(',', $data['pct']));
+        $itcValues = array_map('hexdec', explode(',', $data['itc']));
         
-        // Ambil ukuran file untuk menghitung panjang ciphertext
+        $fp = fopen($datPath, 'rb');
+        $fullCiphertext = "";
+        
+        // Baca ukuran file untuk mengetahui batas pembacaan chunk terakhir
         $stats = fstat($fp);
         $totalSize = $stats['size'];
-        $ciphertextLen = $totalSize - (int)$data['pct'];
-        
-        $ciphertext = fread($fp, $ciphertextLen);
+
+        for ($i = 0; $i < count($offsets); $i++) {
+            $offset = (int)$offsets[$i];
+            
+            // Verifikasi Marker sebelum offset
+            fseek($fp, $offset - 1);
+            $markerBytes = fread($fp, 1);
+            if ($markerBytes === false || strlen($markerBytes) === 0) {
+                fclose($fp);
+                return null;
+            }
+            $marker = ord($markerBytes);
+            if ($marker !== (int)$itcValues[$i]) {
+                fclose($fp);
+                return null; // Marker tampered atau mismatch
+            }
+
+            // Tentukan panjang chunk
+            // Jika bukan chunk terakhir, panjangnya adalah selisih offset berikutnya - 1 (marker berikutnya) - offset saat ini
+            if (isset($offsets[$i+1])) {
+                $len = ((int)$offsets[$i+1] - 1) - $offset;
+            } else {
+                $len = $totalSize - $offset;
+            }
+
+            if ($len > 0) {
+                fseek($fp, $offset);
+                $fullCiphertext .= fread($fp, $len);
+            }
+        }
         fclose($fp);
         
         return EtmToken::pack(
             Base64Url::decode($data['iv']),
-            $ciphertext,
+            $fullCiphertext,
             Base64Url::decode($data['mac']),
             $data['meta'] ?? null
         );
@@ -226,7 +269,11 @@ final class FileSecureStorage
 
     private function saveIndex(array $index): void
     {
-        file_put_contents($this->indexFile, json_encode($index));
+        $dir = dirname($this->indexFile);
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0777, true);
+        }
+        file_put_contents($this->indexFile, json_encode($index), LOCK_EX);
     }
 
     private function getFolderName(string $id, array $indexData): string

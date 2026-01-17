@@ -126,7 +126,8 @@ class AntiTamperTest
             
             // Ambil offset pct dari JSON
             $jsonData = json_decode(file_get_contents($jsonPath), true);
-            $pct = (int)$jsonData['pct'];
+            $offsets = array_map('hexdec', explode(',', $jsonData['pct']));
+            $pct = $offsets[0];
 
             // Tamper isi file .dat tepat pada posisi ciphertext (setelah offset pct)
             $rawContent = file_get_contents($datPath);
